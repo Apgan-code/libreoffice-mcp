@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">LibreOffice MCP</title>
+  <desc id="desc">Otomasi dokumen dari chat. Ikon dokumen, spreadsheet, dan slide terhubung melalui satu server.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#101d36"/>
+      <stop offset="1" stop-color="#091927"/>
+    </linearGradient>
+    <linearGradient id="accent" x2="1" y2="0">
+      <stop stop-color="#7de4ff"/>
+      <stop offset="1" stop-color="#81f2b4"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop stop-color="#226969" stop-opacity=".68"/>
+      <stop offset="1" stop-color="#226969" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#a9cbd5" opacity=".17"/>
+    </pattern>
+    <clipPath id="frame"><rect x="1" y="1" width="1198" height="318" rx="28"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="320" fill="url(#background)"/>
+    <ellipse cx="967" cy="156" rx="330" ry="260" fill="url(#glow)"/>
+    <rect x="720" width="480" height="320" fill="url(#dots)"/>
+    <path d="M755 291L939 107L1119 107M932 318l158-158h110M1020 16l-72 72" fill="none" stroke="#7de4ff" stroke-opacity=".13"/>
+    <rect x="64" y="58" width="52" height="6" rx="3" fill="url(#accent)"/>
+    <text x="64" y="153" fill="#f3fbff" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="70" font-weight="700">LibreOffice <tspan fill="#89edc8">MCP</tspan></text>
+    <text x="67" y="201" fill="#c3d8e8" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="28">Otomasi dokumen dari chat</text>
+    <g fill="none" stroke="#699ca7" stroke-width="2.5" stroke-linecap="round">
+      <path d="M736 160h104M840 160c45 0 28-92 78-92h54M840 160h108M840 160c45 0 28 92 78 92h54"/>
+    </g>
+    <circle cx="840" cy="160" r="7" fill="#a3efcc" stroke="#1c5364" stroke-width="3"/>
+    <g transform="translate(688 136)">
+      <rect width="72" height="48" rx="14" fill="#18394c" stroke="#7cd8e7" stroke-width="1.5"/>
+      <path d="M16 13h40v18H40l-7 6v-6H16Z" fill="none" stroke="#b6f3fb" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M23 22h5m5 0h5m5 0h5" stroke="#b6f3fb" stroke-width="2" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(972 34)">
+      <rect width="136" height="68" rx="14" fill="#142d46" stroke="#428ead"/>
+      <rect x="16" y="14" width="35" height="40" rx="5" fill="#294c68"/>
+      <path d="M23 25h21m-21 8h21m-21 8h14" stroke="#8fe3ff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M65 24h49m-49 11h38m-38 11h44" stroke="#56849e" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(948 126)">
+      <rect width="168" height="68" rx="14" fill="#12393d" stroke="#48aa82"/>
+      <rect x="16" y="14" width="48" height="40" rx="5" fill="#225454"/>
+      <path d="M24 29h32m-32 11h32M35 22v25m10-25v25" stroke="#8aebc0" stroke-width="2"/>
+      <path d="M81 45l17-14 13 7 15-16 20 9" fill="none" stroke="#84edb4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(972 218)">
+      <rect width="136" height="68" rx="14" fill="#302d42" stroke="#ae8284"/>
+      <rect x="16" y="14" width="44" height="40" rx="5" fill="#58424e"/>
+      <path d="M24 43l9-12 6 6 6-9 7 15Z" fill="#ffc5ae"/>
+      <circle cx="33" cy="24" r="3" fill="#ffe2d7"/>
+      <path d="M74 25h43m-43 12h31m-31 11h38" stroke="#a68086" stroke-width="3" stroke-linecap="round"/>
+    </g>
+  </g>
+  <rect x="1" y="1" width="1198" height="318" rx="28" fill="none" stroke="#35536b" stroke-width="2"/>
+</svg>
