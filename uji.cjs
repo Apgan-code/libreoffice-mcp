@@ -2,30 +2,22 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
-const readline = require("node:readline");
 const assert = require("node:assert/strict");
+const connect = require("./tests/connect.cjs");
 
 async function main() {
   const root = fs.mkdtempSync(path.join(process.env.LO_TEST_DIR || os.tmpdir(), "uji-lo-"));
   console.log("Dokumen contoh:", root);
-  const child = spawn(process.execPath, [path.join(__dirname, "server.cjs")], {
-    env: { ...process.env, LO_MCP_WORKSPACE: root }, stdio: ["pipe", "pipe", "inherit"], windowsHide: true
-  });
-  const replies = readline.createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+  const mode = process.argv.includes("--http") ? "http" : "stdio";
+  const transport = await connect[mode](root);
+  console.log("Transport:", mode);
   let id = 0;
-  function send(message) { child.stdin.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + "\n"); }
+  function send(message) { return transport.send({ jsonrpc: "2.0", ...message }); }
   async function request(method, params) {
-    send({ id: ++id, method, params });
-    while (true) {
-      const line = await replies.next();
-      assert.ok(!line.done, "Server terputus");
-      const reply = JSON.parse(line.value);
-      if (!("id" in reply)) continue;
-      assert.equal(reply.id, id);
-      assert.ok(!reply.error, JSON.stringify(reply.error));
-      return reply.result;
-    }
+    const reply = await send({ id: ++id, method, params });
+    assert.equal(reply.id, id);
+    assert.ok(!reply.error, JSON.stringify(reply.error));
+    return reply.result;
   }
   const passed = new Set();
   let cases = 0;
@@ -47,7 +39,7 @@ async function main() {
   try {
     const init = await request("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "uji-libreoffice", version: "1" } });
     assert.equal(init.serverInfo.name, "libreoffice-local");
-    send({ method: "notifications/initialized" });
+    await send({ method: "notifications/initialized" });
     const catalog = await request("tools/list", {});
     console.log("Alat terdaftar:", catalog.tools.length);
     await call("office_status", {}, v => { assert.equal(v.workspace, root); console.log(v.version); });
@@ -96,6 +88,6 @@ async function main() {
     await require("./tests/extra.cjs")(call);
     assert.deepEqual(catalog.tools.map(t => t.name).filter(n => !passed.has(n)), [], "Sebagian alat belum lulus");
     console.log(cases, "skenario lulus;", passed.size, "alat berhasil dipanggil.");
-  } finally { child.stdin.end(); }
+  } finally { transport.close(); }
 }
 main().catch(err => { console.error(err.message); process.exitCode = 1; });

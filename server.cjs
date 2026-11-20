@@ -43607,12 +43607,2626 @@ var require_stdio2 = __commonJS({
   }
 });
 
+// work/build/node_modules/@hono/node-server/dist/constants-BXAKTxRC.cjs
+var require_constants_BXAKTxRC = __commonJS({
+  "work/build/node_modules/@hono/node-server/dist/constants-BXAKTxRC.cjs"(exports2) {
+    var X_ALREADY_SENT = "x-hono-already-sent";
+    Object.defineProperty(exports2, "X_ALREADY_SENT", {
+      enumerable: true,
+      get: function() {
+        return X_ALREADY_SENT;
+      }
+    });
+  }
+});
+
+// work/build/node_modules/hono/dist/cjs/helper/websocket/index.js
+var require_websocket = __commonJS({
+  "work/build/node_modules/hono/dist/cjs/helper/websocket/index.js"(exports2) {
+    Object.defineProperty(exports2, Symbol.toStringTag, { value: "Module" });
+    var WSContext = class {
+      #init;
+      constructor(init) {
+        this.#init = init;
+        this.raw = init.raw;
+        this.url = init.url ? new URL(init.url) : null;
+        this.protocol = init.protocol ?? null;
+      }
+      send(source2, options) {
+        this.#init.send(source2, options ?? {});
+      }
+      raw;
+      binaryType = "arraybuffer";
+      get readyState() {
+        return this.#init.readyState;
+      }
+      url;
+      protocol;
+      close(code, reason) {
+        this.#init.close(code, reason);
+      }
+    };
+    var createWSMessageEvent = (source2) => {
+      return new MessageEvent("message", { data: source2 });
+    };
+    var defineWebSocketHelper = (handler) => {
+      return ((...args) => {
+        if (typeof args[0] === "function") {
+          const [createEvents, options] = args;
+          return async function upgradeWebSocket(c, next) {
+            const result = await handler(c, await createEvents(c), options);
+            if (result) return result;
+            await next();
+          };
+        } else {
+          const [c, events, options] = args;
+          return (async () => {
+            const upgraded = await handler(c, events, options);
+            if (!upgraded) throw new Error("Failed to upgrade WebSocket");
+            return upgraded;
+          })();
+        }
+      });
+    };
+    exports2.WSContext = WSContext;
+    exports2.createWSMessageEvent = createWSMessageEvent;
+    exports2.defineWebSocketHelper = defineWebSocketHelper;
+  }
+});
+
+// work/build/node_modules/@hono/node-server/dist/index.cjs
+var require_dist2 = __commonJS({
+  "work/build/node_modules/@hono/node-server/dist/index.cjs"(exports2) {
+    Object.defineProperty(exports2, Symbol.toStringTag, { value: "Module" });
+    var require_constants = require_constants_BXAKTxRC();
+    var node_http = require("node:http");
+    var node_http2 = require("node:http2");
+    var node_stream = require("node:stream");
+    var hono_ws = require_websocket();
+    var RequestError = class extends Error {
+      constructor(message, options) {
+        super(message, options);
+        this.name = "RequestError";
+      }
+    };
+    var nonJoinedHeaders = /* @__PURE__ */ new Set([
+      "age",
+      "authorization",
+      "content-length",
+      "content-type",
+      "etag",
+      "expires",
+      "from",
+      "host",
+      "if-modified-since",
+      "if-unmodified-since",
+      "last-modified",
+      "location",
+      "max-forwards",
+      "proxy-authorization",
+      "referer",
+      "retry-after",
+      "server",
+      "user-agent"
+    ]);
+    var validHeaderName = /^[!#$%&'*+\-.^_`|~\dA-Za-z]+$/;
+    var isHttpWhitespace = (code) => code === 9 || code === 10 || code === 13 || code === 32;
+    var normalizeHeaderValue = (value) => {
+      if (!isHttpWhitespace(value.charCodeAt(0)) && !isHttpWhitespace(value.charCodeAt(value.length - 1))) return value;
+      let start2 = 0;
+      let end = value.length;
+      while (start2 < end && isHttpWhitespace(value.charCodeAt(start2))) start2++;
+      while (end > start2 && isHttpWhitespace(value.charCodeAt(end - 1))) end--;
+      return value.slice(start2, end);
+    };
+    var forbiddenHeaderValue = /[\0\r\n]/;
+    var GlobalHeaders = globalThis.Headers;
+    var materializeHeaders = (rawHeaders, HeadersCtor = GlobalHeaders) => {
+      const headers = new HeadersCtor();
+      for (let i = 0; i < rawHeaders.length; i += 2) {
+        const name = rawHeaders[i];
+        if (!name.startsWith(":")) headers.append(name, rawHeaders[i + 1]);
+      }
+      return headers;
+    };
+    var RequestHeaders = class {
+      #incoming;
+      #rawHeaders;
+      #headers;
+      #invalidValue;
+      constructor(incoming) {
+        this.#incoming = incoming;
+        if (incoming instanceof node_http2.Http2ServerRequest) this.#rawHeaders = incoming.rawHeaders.slice();
+      }
+      get #lazyRawHeaders() {
+        return this.#rawHeaders ??= this.#incoming.rawHeaders.slice();
+      }
+      get #native() {
+        if (!this.#headers) {
+          this.#headers = materializeHeaders(this.#lazyRawHeaders);
+          this.#rawHeaders = void 0;
+        }
+        return this.#headers;
+      }
+      #normalizedName(name) {
+        if (typeof name !== "string") return;
+        if (!validHeaderName.test(name)) throw new TypeError(`Invalid header name: ${name}`);
+        return name.toLowerCase();
+      }
+      #lookupHttp1(lowerName) {
+        const headers = this.#incoming instanceof node_http2.Http2ServerRequest ? void 0 : this.#incoming.headers;
+        if (!headers || nonJoinedHeaders.has(lowerName) || lowerName === "set-cookie" || lowerName === "__proto__") return;
+        if (!Object.hasOwn(headers, lowerName)) return null;
+        const rawValue = headers[lowerName];
+        if (typeof rawValue === "string") {
+          const value = normalizeHeaderValue(rawValue);
+          return forbiddenHeaderValue.test(value) ? void 0 : value;
+        }
+      }
+      #lookup(rawHeaders, lowerName) {
+        const separator = lowerName === "cookie" ? "; " : ", ";
+        let value = null;
+        for (let i = 0; i < rawHeaders.length; i += 2) {
+          const rawName = rawHeaders[i];
+          if (rawName.length === lowerName.length && rawName.toLowerCase() === lowerName) {
+            const rawValue = normalizeHeaderValue(rawHeaders[i + 1]);
+            if (forbiddenHeaderValue.test(rawValue)) {
+              this.#invalidValue = true;
+              return;
+            }
+            value = value === null ? rawValue : value + separator + rawValue;
+          }
+        }
+        return value;
+      }
+      append(name, value) {
+        this.#native.append(name, value);
+      }
+      delete(name) {
+        this.#native.delete(name);
+      }
+      get(name) {
+        const lowerName = this.#normalizedName(name);
+        if (lowerName && !this.#headers && !this.#invalidValue) {
+          const http1Value = this.#lookupHttp1(lowerName);
+          if (http1Value !== void 0) return http1Value;
+          const value = this.#lookup(this.#lazyRawHeaders, lowerName);
+          if (value !== void 0) return value;
+        }
+        return this.#native.get(name);
+      }
+      has(name) {
+        const lowerName = this.#normalizedName(name);
+        if (lowerName && !this.#headers && !this.#invalidValue) {
+          const http1Value = this.#lookupHttp1(lowerName);
+          if (http1Value !== void 0) return http1Value !== null;
+          const value = this.#lookup(this.#lazyRawHeaders, lowerName);
+          if (value !== void 0) return value !== null;
+        }
+        return this.#native.has(name);
+      }
+      set(name, value) {
+        this.#native.set(name, value);
+      }
+      getSetCookie() {
+        return this.#native.getSetCookie();
+      }
+      keys() {
+        return this.#native.keys();
+      }
+      values() {
+        return this.#native.values();
+      }
+      entries() {
+        return this.#native.entries();
+      }
+      forEach(callback, thisArg) {
+        this.#native.forEach((value, key) => {
+          callback.call(thisArg, value, key, this);
+        });
+      }
+      [Symbol.iterator]() {
+        return this.entries();
+      }
+    };
+    Object.defineProperty(RequestHeaders.prototype, /* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom"), { value: function(depth, options, inspectFn) {
+      return `Headers (lightweight) ${inspectFn(Object.fromEntries(this), {
+        ...options,
+        depth: depth == null ? null : depth - 1
+      })}`;
+    } });
+    Object.setPrototypeOf(RequestHeaders.prototype, GlobalHeaders.prototype);
+    var newHeadersFromIncoming = (incoming) => globalThis.Headers === GlobalHeaders ? new RequestHeaders(incoming) : materializeHeaders(incoming.rawHeaders, globalThis.Headers);
+    var reValidRequestUrl = /^\/[!#$&-;=?-\[\]_a-z~]*$/;
+    var reDotSegment = /\/\.\.?(?:[/?#]|$)/;
+    var reValidHost = /^[a-z0-9._-]+(?::(?:[1-5]\d{3,4}|[6-9]\d{3}))?$/;
+    var validateRequestTarget = (target) => {
+      const backslash = target.indexOf("\\");
+      if (backslash !== -1) {
+        const query = target.indexOf("?");
+        if (query === -1 || backslash < query) throw new RequestError("Backslash in request path");
+      }
+    };
+    var buildUrl = (scheme, host, incomingUrl) => {
+      const url = `${scheme}://${host}${incomingUrl}`;
+      if (!reValidHost.test(host)) {
+        validateRequestTarget(incomingUrl);
+        const urlObj = new URL(url);
+        if (urlObj.hostname.length !== host.length && urlObj.hostname !== (host.includes(":") ? host.replace(/:\d+$/, "") : host).toLowerCase()) throw new RequestError("Invalid host header");
+        return urlObj.href;
+      } else if (incomingUrl.length === 0) return url + "/";
+      else {
+        if (incomingUrl.charCodeAt(0) !== 47) throw new RequestError("Invalid URL");
+        if (!reValidRequestUrl.test(incomingUrl) || reDotSegment.test(incomingUrl)) {
+          validateRequestTarget(incomingUrl);
+          return new URL(url).href;
+        }
+        return url;
+      }
+    };
+    var toRequestError = (e) => {
+      if (e instanceof RequestError) return e;
+      return new RequestError(e.message, { cause: e });
+    };
+    var GlobalRequest = global.Request;
+    var Request$1 = class Request$12 extends GlobalRequest {
+      static [Symbol.hasInstance](instance) {
+        if (this === Request$12) return instance instanceof GlobalRequest || Function.prototype[Symbol.hasInstance].call(this, instance);
+        return Function.prototype[Symbol.hasInstance].call(this, instance);
+      }
+      constructor(input, options) {
+        if (typeof input === "object" && getRequestCache in input) {
+          const hasReplacementBody = options !== void 0 && "body" in options && options.body != null;
+          if (input[bodyConsumedDirectlyKey] && !hasReplacementBody) throw new TypeError("Cannot construct a Request with a Request object that has already been used.");
+          input = input[getRequestCache]();
+        }
+        if (typeof options?.body?.getReader !== "undefined") options.duplex ??= "half";
+        super(input, options);
+      }
+    };
+    var wrapBodyStream = /* @__PURE__ */ Symbol("wrapBodyStream");
+    var byteExactEncodings = /* @__PURE__ */ new Set([
+      "latin1",
+      "binary",
+      "hex",
+      "base64",
+      "base64url"
+    ]);
+    var isByteExactEncoding = (encoding) => encoding === null || byteExactEncodings.has(encoding);
+    var bodyBufferedBeforeDisconnectKey = /* @__PURE__ */ Symbol("bodyBufferedBeforeDisconnect");
+    var bodyBufferedLengthBeforeDisconnectKey = /* @__PURE__ */ Symbol("bodyBufferedLengthBeforeDisconnect");
+    var toBufferChunk = (chunk, encoding) => Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding ?? "utf8");
+    var isRecoverableDisconnectedIncoming = (incoming) => !(incoming instanceof node_http2.Http2ServerRequest) && !!incoming.complete && !!incoming.readableAborted && typeof incoming.read === "function" && isByteExactEncoding(incoming.readableEncoding);
+    var recordBodyBufferedBeforeDisconnect = (incoming) => {
+      if (incoming.readableDidRead || !isRecoverableDisconnectedIncoming(incoming)) return;
+      const incomingWithRecovery = incoming;
+      incomingWithRecovery[bodyBufferedLengthBeforeDisconnectKey] ??= incoming.readableLength;
+    };
+    var readBodyBufferedBeforeDisconnect = (incoming, chunks) => {
+      if (incoming.readableDidRead && !chunks || !isRecoverableDisconnectedIncoming(incoming)) return;
+      const incomingWithRecovery = incoming;
+      if (incomingWithRecovery[bodyBufferedBeforeDisconnectKey] !== void 0) return incomingWithRecovery[bodyBufferedBeforeDisconnectKey];
+      let result;
+      const errored = incoming.errored;
+      if (errored && errored.code !== "ECONNRESET") result = errored;
+      else if (incomingWithRecovery[bodyBufferedLengthBeforeDisconnectKey] !== void 0 && incoming.readableLength !== incomingWithRecovery[bodyBufferedLengthBeforeDisconnectKey]) result = newBodyUnusableError();
+      else {
+        const bodyChunks = chunks ?? [];
+        let chunk;
+        while ((chunk = incoming.read()) !== null) bodyChunks.push(toBufferChunk(chunk, incoming.readableEncoding));
+        const buffer = bodyChunks.length === 1 ? bodyChunks[0] : Buffer.concat(bodyChunks);
+        result = buffer;
+        const contentLength = incoming.headers["content-length"];
+        if (typeof contentLength === "string" && /^\d+$/.test(contentLength)) {
+          const expectedLength = Number(contentLength);
+          if (Number.isSafeInteger(expectedLength) && buffer.length !== expectedLength) result = newBodyUnusableError();
+        }
+      }
+      incomingWithRecovery[bodyBufferedBeforeDisconnectKey] = result;
+      return result;
+    };
+    var enqueueBufferedBody = (controller, buffered) => {
+      if (buffered instanceof Error) {
+        controller.error(buffered);
+        return;
+      }
+      if (buffered.length > 0) controller.enqueue(buffered);
+      controller.close();
+    };
+    var newRequestFromIncoming = (method, url, headers, incoming, abortController) => {
+      const init = {
+        method,
+        headers,
+        signal: abortController.signal
+      };
+      if (method === "TRACE") {
+        init.method = "GET";
+        const req = new Request$1(url, init);
+        Object.defineProperty(req, "method", { get() {
+          return "TRACE";
+        } });
+        return req;
+      }
+      if (!(method === "GET" || method === "HEAD")) if ("rawBody" in incoming && incoming.rawBody instanceof Buffer) init.body = new ReadableStream({ start(controller) {
+        controller.enqueue(incoming.rawBody);
+        controller.close();
+      } });
+      else if (incoming[wrapBodyStream]) {
+        let reader;
+        init.body = new ReadableStream({ async pull(controller) {
+          try {
+            if (!reader) {
+              const buffered = readBodyBufferedBeforeDisconnect(incoming);
+              if (buffered !== void 0) {
+                enqueueBufferedBody(controller, buffered);
+                return;
+              }
+            }
+            reader ||= node_stream.Readable.toWeb(incoming).getReader();
+            const { done, value } = await reader.read();
+            if (done) controller.close();
+            else controller.enqueue(value);
+          } catch (error) {
+            controller.error(error);
+          }
+        } });
+      } else {
+        const buffered = readBodyBufferedBeforeDisconnect(incoming);
+        if (buffered !== void 0) init.body = new ReadableStream({ start(controller) {
+          enqueueBufferedBody(controller, buffered);
+        } });
+        else init.body = node_stream.Readable.toWeb(incoming);
+      }
+      return new Request$1(url, init);
+    };
+    var getRequestCache = /* @__PURE__ */ Symbol("getRequestCache");
+    var requestCache = /* @__PURE__ */ Symbol("requestCache");
+    var incomingKey = /* @__PURE__ */ Symbol("incomingKey");
+    var urlKey = /* @__PURE__ */ Symbol("urlKey");
+    var methodKey = /* @__PURE__ */ Symbol("methodKey");
+    var headersKey = /* @__PURE__ */ Symbol("headersKey");
+    var abortControllerKey = /* @__PURE__ */ Symbol("abortControllerKey");
+    var getAbortController = /* @__PURE__ */ Symbol("getAbortController");
+    var abortRequest = /* @__PURE__ */ Symbol("abortRequest");
+    var bodyBufferKey = /* @__PURE__ */ Symbol("bodyBuffer");
+    var bodyReadPromiseKey = /* @__PURE__ */ Symbol("bodyReadPromise");
+    var bodyConsumedDirectlyKey = /* @__PURE__ */ Symbol("bodyConsumedDirectly");
+    var bodyLockReaderKey = /* @__PURE__ */ Symbol("bodyLockReader");
+    var abortReasonKey = /* @__PURE__ */ Symbol("abortReason");
+    var newBodyUnusableError = () => {
+      return /* @__PURE__ */ new TypeError("Body is unusable");
+    };
+    var rejectBodyUnusable = () => {
+      return Promise.reject(newBodyUnusableError());
+    };
+    var textDecoder = new TextDecoder();
+    var consumeBodyDirectOnce = (request) => {
+      if (request[bodyConsumedDirectlyKey]) return rejectBodyUnusable();
+      request[bodyConsumedDirectlyKey] = true;
+    };
+    var toArrayBuffer = (buf) => {
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    };
+    var contentType = (request) => {
+      return (request[headersKey] ||= newHeadersFromIncoming(request[incomingKey])).get("content-type") || "";
+    };
+    var methodTokenRegExp = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+    var normalizeIncomingMethod = (method) => {
+      if (typeof method !== "string" || method.length === 0) return "GET";
+      switch (method) {
+        case "DELETE":
+        case "GET":
+        case "HEAD":
+        case "OPTIONS":
+        case "PATCH":
+        case "POST":
+        case "PUT":
+        case "QUERY":
+          return method;
+      }
+      const upper = method.toUpperCase();
+      switch (upper) {
+        case "DELETE":
+        case "GET":
+        case "HEAD":
+        case "OPTIONS":
+        case "POST":
+        case "PUT":
+          return upper;
+        default:
+          return method;
+      }
+    };
+    var validateDirectReadMethod = (method) => {
+      if (!methodTokenRegExp.test(method)) return /* @__PURE__ */ new TypeError(`'${method}' is not a valid HTTP method.`);
+      const normalized = method.toUpperCase();
+      if (normalized === "CONNECT" || normalized === "TRACK" || normalized === "TRACE" && method !== "TRACE") return /* @__PURE__ */ new TypeError(`'${method}' HTTP method is unsupported.`);
+    };
+    var readBodyWithFastPath = (request, method, fromBuffer) => {
+      if (request[bodyConsumedDirectlyKey]) return rejectBodyUnusable();
+      const methodName = request.method;
+      if (methodName === "GET" || methodName === "HEAD") return request[getRequestCache]()[method]();
+      const methodValidationError = validateDirectReadMethod(methodName);
+      if (methodValidationError) return Promise.reject(methodValidationError);
+      if (request[requestCache]) {
+        if (methodName !== "TRACE") return request[requestCache][method]();
+      }
+      const alreadyUsedError = consumeBodyDirectOnce(request);
+      if (alreadyUsedError) return alreadyUsedError;
+      const raw = readRawBodyIfAvailable(request);
+      if (raw) {
+        const result = Promise.resolve(fromBuffer(raw, request));
+        request[bodyBufferKey] = void 0;
+        return result;
+      }
+      return readBodyDirect(request).then((buf) => {
+        const result = fromBuffer(buf, request);
+        request[bodyBufferKey] = void 0;
+        return result;
+      });
+    };
+    var readRawBodyIfAvailable = (request) => {
+      const incoming = request[incomingKey];
+      if ("rawBody" in incoming && incoming.rawBody instanceof Buffer) return incoming.rawBody;
+    };
+    var normalizeAbortError = (request, incoming) => {
+      if (incoming.errored) return incoming.errored;
+      const reason = request[abortReasonKey];
+      if (reason !== void 0) return reason instanceof Error ? reason : new Error(String(reason));
+      return /* @__PURE__ */ new Error("Client connection prematurely closed.");
+    };
+    var readBodyDirect = (request) => {
+      if (request[bodyBufferKey]) return Promise.resolve(request[bodyBufferKey]);
+      if (request[bodyReadPromiseKey]) return request[bodyReadPromiseKey];
+      const incoming = request[incomingKey];
+      if (incoming.readableDidRead) return rejectBodyUnusable();
+      const buffered = readBodyBufferedBeforeDisconnect(incoming);
+      if (buffered !== void 0) {
+        if (buffered instanceof Error) return Promise.reject(buffered);
+        request[bodyBufferKey] = buffered;
+        return Promise.resolve(buffered);
+      }
+      const promise = new Promise((resolve, reject) => {
+        const chunks = [];
+        let settled = false;
+        const finish = (callback) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          callback();
+        };
+        const recoverCompleteBodyAfterDisconnect = (error) => {
+          const streamError = incoming.errored ?? error;
+          if (!isRecoverableDisconnectedIncoming(incoming) || streamError && streamError.code !== "ECONNRESET") return false;
+          finish(() => {
+            const recovered = readBodyBufferedBeforeDisconnect(incoming, chunks);
+            if (recovered instanceof Error) reject(recovered);
+            else if (recovered === void 0) reject(error ?? normalizeAbortError(request, incoming));
+            else {
+              request[bodyBufferKey] = recovered;
+              resolve(recovered);
+            }
+          });
+          return true;
+        };
+        const onData = (chunk) => {
+          chunks.push(toBufferChunk(chunk, incoming.readableEncoding));
+        };
+        const onEnd = () => {
+          finish(() => {
+            const buffer = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
+            request[bodyBufferKey] = buffer;
+            resolve(buffer);
+          });
+        };
+        const onError = (error) => {
+          if (recoverCompleteBodyAfterDisconnect(error)) return;
+          finish(() => {
+            reject(error);
+          });
+        };
+        const onClose = () => {
+          if (incoming.readableEnded) {
+            onEnd();
+            return;
+          }
+          if (recoverCompleteBodyAfterDisconnect()) return;
+          finish(() => {
+            reject(normalizeAbortError(request, incoming));
+          });
+        };
+        const cleanup = () => {
+          incoming.off("data", onData);
+          incoming.off("end", onEnd);
+          incoming.off("error", onError);
+          incoming.off("close", onClose);
+          request[bodyReadPromiseKey] = void 0;
+        };
+        incoming.on("data", onData);
+        incoming.on("end", onEnd);
+        incoming.on("error", onError);
+        incoming.on("close", onClose);
+        queueMicrotask(() => {
+          if (settled) return;
+          if (incoming.readableEnded) onEnd();
+          else if (incoming.errored) onError(incoming.errored);
+          else if (incoming.destroyed) onClose();
+        });
+      });
+      request[bodyReadPromiseKey] = promise;
+      return promise;
+    };
+    var requestPrototype = {
+      get method() {
+        return this[methodKey];
+      },
+      get url() {
+        return this[urlKey];
+      },
+      get headers() {
+        return this[headersKey] ||= newHeadersFromIncoming(this[incomingKey]);
+      },
+      [abortRequest](reason) {
+        if (this[abortReasonKey] === void 0) this[abortReasonKey] = reason;
+        const abortController = this[abortControllerKey];
+        if (abortController && !abortController.signal.aborted) abortController.abort(reason);
+      },
+      [getAbortController]() {
+        this[abortControllerKey] ||= new AbortController();
+        if (this[abortReasonKey] !== void 0 && !this[abortControllerKey].signal.aborted) this[abortControllerKey].abort(this[abortReasonKey]);
+        return this[abortControllerKey];
+      },
+      [getRequestCache]() {
+        const abortController = this[getAbortController]();
+        if (this[requestCache]) return this[requestCache];
+        const method = this.method;
+        if (this[bodyConsumedDirectlyKey] && !(method === "GET" || method === "HEAD")) {
+          this[bodyBufferKey] = void 0;
+          const init = {
+            method: method === "TRACE" ? "GET" : method,
+            headers: this.headers,
+            signal: abortController.signal
+          };
+          if (method !== "TRACE") {
+            init.body = new ReadableStream({ start(c) {
+              c.close();
+            } });
+            init.duplex = "half";
+          }
+          const req = new Request$1(this[urlKey], init);
+          if (method === "TRACE") Object.defineProperty(req, "method", { get() {
+            return "TRACE";
+          } });
+          return this[requestCache] = req;
+        }
+        return this[requestCache] = newRequestFromIncoming(this.method, this[urlKey], this.headers, this[incomingKey], abortController);
+      },
+      get body() {
+        if (!this[bodyConsumedDirectlyKey]) return this[getRequestCache]().body;
+        const request = this[getRequestCache]();
+        if (!this[bodyLockReaderKey] && request.body) this[bodyLockReaderKey] = request.body.getReader();
+        return request.body;
+      },
+      get bodyUsed() {
+        if (this[bodyConsumedDirectlyKey]) return true;
+        if (this[requestCache]) return this[requestCache].bodyUsed;
+        return false;
+      }
+    };
+    Object.defineProperty(requestPrototype, "signal", { get() {
+      return this[getAbortController]().signal;
+    } });
+    [
+      "cache",
+      "credentials",
+      "destination",
+      "duplex",
+      "integrity",
+      "mode",
+      "redirect",
+      "referrer",
+      "referrerPolicy",
+      "keepalive"
+    ].forEach((k) => {
+      Object.defineProperty(requestPrototype, k, { get() {
+        return this[getRequestCache]()[k];
+      } });
+    });
+    ["clone", "formData"].forEach((k) => {
+      Object.defineProperty(requestPrototype, k, { value: function() {
+        if (this[bodyConsumedDirectlyKey]) {
+          if (k === "clone") throw newBodyUnusableError();
+          return rejectBodyUnusable();
+        }
+        return this[getRequestCache]()[k]();
+      } });
+    });
+    Object.defineProperty(requestPrototype, "text", { value: function() {
+      return readBodyWithFastPath(this, "text", (buf) => textDecoder.decode(buf));
+    } });
+    Object.defineProperty(requestPrototype, "arrayBuffer", { value: function() {
+      return readBodyWithFastPath(this, "arrayBuffer", (buf) => toArrayBuffer(buf));
+    } });
+    Object.defineProperty(requestPrototype, "blob", { value: function() {
+      return readBodyWithFastPath(this, "blob", (buf, request) => {
+        const type = contentType(request);
+        const init = type ? { headers: { "content-type": type } } : void 0;
+        return new Response(buf, init).blob();
+      });
+    } });
+    Object.defineProperty(requestPrototype, "bytes", { value: function() {
+      return this.arrayBuffer().then((buf) => new Uint8Array(buf));
+    } });
+    Object.defineProperty(requestPrototype, "json", { value: function() {
+      if (this[bodyConsumedDirectlyKey]) return rejectBodyUnusable();
+      return this.text().then(JSON.parse);
+    } });
+    Object.defineProperty(requestPrototype, /* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom"), { value: function(depth, options, inspectFn) {
+      return `Request (lightweight) ${inspectFn({
+        method: this.method,
+        url: this.url,
+        headers: this.headers,
+        nativeRequest: this[requestCache]
+      }, {
+        ...options,
+        depth: depth == null ? null : depth - 1
+      })}`;
+    } });
+    Object.setPrototypeOf(requestPrototype, Request$1.prototype);
+    var newRequest = (incoming, defaultHostname) => {
+      const req = Object.create(requestPrototype);
+      req[incomingKey] = incoming;
+      req[methodKey] = normalizeIncomingMethod(incoming.method);
+      const incomingUrl = incoming.url || "";
+      if (incomingUrl[0] !== "/" && (incomingUrl.startsWith("http://") || incomingUrl.startsWith("https://"))) {
+        if (incoming instanceof node_http2.Http2ServerRequest) throw new RequestError("Absolute URL for :path is not allowed in HTTP/2");
+        try {
+          validateRequestTarget(incomingUrl);
+          req[urlKey] = new URL(incomingUrl).href;
+        } catch (e) {
+          throw new RequestError("Invalid absolute URL", { cause: e });
+        }
+        return req;
+      }
+      const host = (incoming instanceof node_http2.Http2ServerRequest ? incoming.authority : incoming.headers.host) || defaultHostname;
+      if (!host) throw new RequestError("Missing host header");
+      let scheme;
+      if (incoming instanceof node_http2.Http2ServerRequest) {
+        scheme = incoming.scheme;
+        if (!(scheme === "http" || scheme === "https")) throw new RequestError("Unsupported scheme");
+      } else scheme = incoming.socket && incoming.socket.encrypted ? "https" : "http";
+      try {
+        req[urlKey] = buildUrl(scheme, host, incomingUrl);
+      } catch (e) {
+        if (e instanceof RequestError) throw e;
+        else throw new RequestError("Invalid URL", { cause: e });
+      }
+      return req;
+    };
+    var defaultContentType = "text/plain; charset=UTF-8";
+    var responseCache = /* @__PURE__ */ Symbol("responseCache");
+    var getResponseCache = /* @__PURE__ */ Symbol("getResponseCache");
+    var cacheKey = /* @__PURE__ */ Symbol("cache");
+    var GlobalResponse = global.Response;
+    var Response$1 = class Response$12 {
+      #body;
+      #init;
+      static [Symbol.hasInstance](instance) {
+        if (this === Response$12) return instance instanceof GlobalResponse || Function.prototype[Symbol.hasInstance].call(this, instance);
+        return Function.prototype[Symbol.hasInstance].call(this, instance);
+      }
+      [getResponseCache]() {
+        const cache = this[cacheKey];
+        const liveHeaders = cache && cache[2] instanceof Headers ? cache[2] : void 0;
+        delete this[cacheKey];
+        return this[responseCache] ||= new GlobalResponse(this.#body, liveHeaders ? {
+          status: this.#init?.status,
+          statusText: this.#init?.statusText,
+          headers: liveHeaders
+        } : this.#init);
+      }
+      constructor(body, init) {
+        let headers;
+        this.#body = body;
+        if (init instanceof GlobalResponse) {
+          const cachedGlobalResponse = init[responseCache];
+          if (cachedGlobalResponse) {
+            this.#init = cachedGlobalResponse;
+            this[getResponseCache]();
+            return;
+          }
+          this.#init = #init in init ? init.#init : init;
+          headers = new Headers(init.headers);
+        } else this.#init = init;
+        if (body == null || typeof body === "string" || typeof body?.getReader !== "undefined" || body instanceof Blob || body instanceof Uint8Array) this[cacheKey] = [
+          init?.status || 200,
+          body ?? null,
+          headers || init?.headers
+        ];
+      }
+      get headers() {
+        const cache = this[cacheKey];
+        if (cache) {
+          if (!(cache[2] instanceof Headers)) cache[2] = new Headers(cache[2] || (cache[1] === null ? void 0 : { "content-type": defaultContentType }));
+          return cache[2];
+        }
+        return this[getResponseCache]().headers;
+      }
+      get status() {
+        return this[cacheKey]?.[0] ?? this[getResponseCache]().status;
+      }
+      get ok() {
+        const status = this.status;
+        return status >= 200 && status < 300;
+      }
+    };
+    [
+      "body",
+      "bodyUsed",
+      "redirected",
+      "statusText",
+      "trailers",
+      "type",
+      "url"
+    ].forEach((k) => {
+      Object.defineProperty(Response$1.prototype, k, { get() {
+        return this[getResponseCache]()[k];
+      } });
+    });
+    [
+      "arrayBuffer",
+      "blob",
+      "bytes",
+      "clone",
+      "formData",
+      "json",
+      "text"
+    ].forEach((k) => {
+      Object.defineProperty(Response$1.prototype, k, { value: function() {
+        return this[getResponseCache]()[k]();
+      } });
+    });
+    Object.defineProperty(Response$1.prototype, /* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom"), { value: function(depth, options, inspectFn) {
+      return `Response (lightweight) ${inspectFn({
+        status: this.status,
+        headers: this.headers,
+        ok: this.ok,
+        nativeResponse: this[responseCache]
+      }, {
+        ...options,
+        depth: depth == null ? null : depth - 1
+      })}`;
+    } });
+    Object.setPrototypeOf(Response$1, GlobalResponse);
+    Object.setPrototypeOf(Response$1.prototype, GlobalResponse.prototype);
+    var validRedirectUrl = /^https?:\/\/[!#-;=?-[\]_a-z~A-Z]+$/;
+    var parseRedirectUrl = (url) => {
+      if (url instanceof URL) return url.href;
+      if (validRedirectUrl.test(url)) return url;
+      return new URL(url).href;
+    };
+    var validRedirectStatuses = /* @__PURE__ */ new Set([
+      301,
+      302,
+      303,
+      307,
+      308
+    ]);
+    Object.defineProperty(Response$1, "redirect", {
+      value: function redirect(url, status = 302) {
+        if (!validRedirectStatuses.has(status)) throw new RangeError("Invalid status code");
+        return new Response$1(null, {
+          status,
+          headers: { location: parseRedirectUrl(url) }
+        });
+      },
+      writable: true,
+      configurable: true
+    });
+    Object.defineProperty(Response$1, "json", {
+      value: function json(data, init) {
+        const body = JSON.stringify(data);
+        if (body === void 0) throw new TypeError("The data is not JSON serializable");
+        const initHeaders = init?.headers;
+        let headers;
+        if (initHeaders) {
+          headers = new Headers(initHeaders);
+          if (!headers.has("content-type")) headers.set("content-type", "application/json");
+        } else headers = { "content-type": "application/json" };
+        return new Response$1(body, {
+          status: init?.status ?? 200,
+          statusText: init?.statusText,
+          headers
+        });
+      },
+      writable: true,
+      configurable: true
+    });
+    async function readWithoutBlocking(readPromise) {
+      return Promise.race([readPromise, Promise.resolve().then(() => Promise.resolve(void 0))]);
+    }
+    function writeFromReadableStreamDefaultReader(reader, writable, currentReadPromise) {
+      const cancel = (error) => {
+        reader.cancel(error).catch(() => {
+        });
+      };
+      const stream = writable.stream;
+      if (writable.destroyed || stream?.closed || stream?.destroyed) {
+        cancel();
+        return reader.closed;
+      }
+      writable.on("close", cancel);
+      writable.on("error", cancel);
+      (currentReadPromise ?? reader.read()).then(flow, handleStreamError);
+      return reader.closed.finally(() => {
+        writable.off("close", cancel);
+        writable.off("error", cancel);
+      });
+      function handleStreamError(error) {
+        if (error) writable.destroy(error);
+      }
+      function onDrain() {
+        reader.read().then(flow, handleStreamError);
+      }
+      function flow({ done, value }) {
+        try {
+          if (done) writable.end();
+          else if (!writable.write(value)) writable.once("drain", onDrain);
+          else reader.read().then(flow, handleStreamError);
+        } catch (e) {
+          handleStreamError(e);
+        }
+      }
+    }
+    function writeFromReadableStream(stream, writable) {
+      if (stream.locked) throw new TypeError("ReadableStream is locked.");
+      else if (writable.destroyed) {
+        stream.cancel().catch(() => {
+        });
+        return;
+      }
+      return writeFromReadableStreamDefaultReader(stream.getReader(), writable);
+    }
+    var buildOutgoingHttpHeaders = (headers, defaultContentType2) => {
+      const res = {};
+      if (!(headers instanceof Headers)) headers = new Headers(headers ?? void 0);
+      if (headers.has("set-cookie")) {
+        const cookies = [];
+        for (const [k, v] of headers) if (k === "set-cookie") cookies.push(v);
+        else res[k] = v;
+        if (cookies.length > 0) res["set-cookie"] = cookies;
+      } else for (const [k, v] of headers) res[k] = v;
+      if (defaultContentType2) res["content-type"] ??= defaultContentType2;
+      return res;
+    };
+    var outgoingEnded = /* @__PURE__ */ Symbol("outgoingEnded");
+    var incomingDraining = /* @__PURE__ */ Symbol("incomingDraining");
+    var DRAIN_TIMEOUT_MS = 500;
+    var MAX_DRAIN_BYTES = 64 * 1024 * 1024;
+    var drainIncoming = (incoming) => {
+      const incomingWithDrainState = incoming;
+      if (incoming.destroyed || incomingWithDrainState[incomingDraining]) return;
+      incomingWithDrainState[incomingDraining] = true;
+      if (incoming instanceof node_http2.Http2ServerRequest) {
+        try {
+          incoming.stream?.close?.(node_http2.constants.NGHTTP2_NO_ERROR);
+        } catch {
+        }
+        return;
+      }
+      let bytesRead = 0;
+      const cleanup = () => {
+        clearTimeout(timer);
+        incoming.off("data", onData);
+        incoming.off("end", cleanup);
+        incoming.off("error", cleanup);
+      };
+      const forceClose = () => {
+        cleanup();
+        const socket = incoming.socket;
+        if (socket && !socket.destroyed) {
+          if (typeof socket.destroySoon === "function") socket.destroySoon();
+          else if (typeof socket.destroy === "function") socket.destroy();
+        }
+      };
+      const timer = setTimeout(forceClose, DRAIN_TIMEOUT_MS);
+      timer.unref?.();
+      const onData = (chunk) => {
+        bytesRead += chunk.length;
+        if (bytesRead > MAX_DRAIN_BYTES) forceClose();
+      };
+      incoming.on("data", onData);
+      incoming.on("end", cleanup);
+      incoming.on("error", cleanup);
+      incoming.resume();
+    };
+    var makeCloseHandler = (req, incoming, outgoing, needsBodyCleanup) => () => {
+      if (incoming.errored) {
+        recordBodyBufferedBeforeDisconnect(incoming);
+        req[abortRequest](incoming.errored.toString());
+      } else if (!outgoing.writableFinished || incoming instanceof node_http2.Http2ServerRequest && incoming.aborted) {
+        recordBodyBufferedBeforeDisconnect(incoming);
+        req[abortRequest]("Client connection prematurely closed.");
+      }
+      if (needsBodyCleanup && !incoming.readableEnded) setTimeout(() => {
+        if (!incoming.readableEnded) setTimeout(() => {
+          drainIncoming(incoming);
+        });
+      });
+    };
+    var isImmediateCacheableResponse = (res) => {
+      if (!(cacheKey in res)) return false;
+      const body = res[cacheKey][1];
+      return body === null || typeof body === "string" || body instanceof Uint8Array;
+    };
+    var handleRequestError = () => new Response(null, { status: 400 });
+    var handleFetchError = (e) => new Response(null, { status: e instanceof Error && (e.name === "TimeoutError" || e.constructor.name === "TimeoutError") ? 504 : 500 });
+    var handleResponseError = (e, outgoing) => {
+      const err = e instanceof Error ? e : new Error("unknown error", { cause: e });
+      if (err.code === "ERR_STREAM_PREMATURE_CLOSE") console.info("The user aborted a request.");
+      else {
+        console.error(e);
+        if (!outgoing.headersSent) {
+          if (outgoing instanceof node_http.ServerResponse) outgoing._contentLength = null;
+          outgoing.writeHead(500, { "Content-Type": "text/plain" });
+        }
+        outgoing.end(`Error: ${err.message}`);
+        outgoing.destroy(err);
+      }
+    };
+    var flushHeaders = (outgoing) => {
+      if ("flushHeaders" in outgoing && outgoing.writable) outgoing.flushHeaders();
+    };
+    var trySetContentLength = (outgoing, status, length) => {
+      const http1 = outgoing;
+      if (http1._contentLength === null && http1._hasBody && http1.useChunkedEncodingByDefault && !http1._removedContLen && status >= 200 && status !== 204 && status !== 304 && !outgoing.hasHeader("content-length") && !outgoing.hasHeader("transfer-encoding") && !outgoing.hasHeader("trailer")) {
+        http1._contentLength = length;
+        return true;
+      }
+      return false;
+    };
+    var writeDefaultHeaders = (outgoing, status, length) => {
+      if (trySetContentLength(outgoing, status, length)) outgoing.writeHead(status, { "Content-Type": defaultContentType });
+      else outgoing.writeHead(status, {
+        "Content-Type": defaultContentType,
+        "Content-Length": length
+      });
+    };
+    var responseViaCache = async (res, outgoing) => {
+      let [status, body, header] = res[cacheKey];
+      if (!header) {
+        if (body === null) {
+          outgoing.writeHead(status);
+          outgoing.end();
+        } else if (typeof body === "string") {
+          writeDefaultHeaders(outgoing, status, Buffer.byteLength(body));
+          outgoing.end(body);
+        } else if (body instanceof Uint8Array) {
+          writeDefaultHeaders(outgoing, status, body.byteLength);
+          outgoing.end(body);
+        } else if (body instanceof Blob) {
+          writeDefaultHeaders(outgoing, status, body.size);
+          outgoing.end(new Uint8Array(await body.arrayBuffer()));
+        } else {
+          outgoing.writeHead(status, { "Content-Type": defaultContentType });
+          flushHeaders(outgoing);
+          await writeFromReadableStream(body, outgoing)?.catch((e) => handleResponseError(e, outgoing));
+        }
+        outgoing[outgoingEnded]?.();
+        return;
+      }
+      let hasContentLength = false;
+      let plainHeaders = false;
+      let canAutoLength = true;
+      if (header instanceof Headers) {
+        hasContentLength = header.has("content-length");
+        header = buildOutgoingHttpHeaders(header, body === null ? void 0 : defaultContentType);
+      } else if (Array.isArray(header)) {
+        const headerObj = new Headers(header);
+        hasContentLength = headerObj.has("content-length");
+        header = buildOutgoingHttpHeaders(headerObj, body === null ? void 0 : defaultContentType);
+      } else {
+        plainHeaders = true;
+        for (const key in header) {
+          if (key.length === 14 && key.toLowerCase() === "content-length") {
+            hasContentLength = true;
+            break;
+          }
+          if (key.length === 17 && key.toLowerCase() === "transfer-encoding" || key.length === 7 && key.toLowerCase() === "trailer") canAutoLength = false;
+        }
+      }
+      if (!hasContentLength) {
+        let length;
+        if (typeof body === "string") length = Buffer.byteLength(body);
+        else if (body instanceof Uint8Array) length = body.byteLength;
+        else if (body instanceof Blob) length = body.size;
+        if (length !== void 0 && (!plainHeaders || !canAutoLength || !trySetContentLength(outgoing, status, length))) {
+          if (plainHeaders) header = { ...header };
+          header["Content-Length"] = length;
+        }
+      }
+      outgoing.writeHead(status, header);
+      if (body == null) outgoing.end();
+      else if (typeof body === "string" || body instanceof Uint8Array) outgoing.end(body);
+      else if (body instanceof Blob) outgoing.end(new Uint8Array(await body.arrayBuffer()));
+      else {
+        flushHeaders(outgoing);
+        await writeFromReadableStream(body, outgoing)?.catch((e) => handleResponseError(e, outgoing));
+      }
+      outgoing[outgoingEnded]?.();
+    };
+    var isPromise = (res) => typeof res.then === "function";
+    var responseViaResponseObject = async (res, outgoing, options = {}) => {
+      if (isPromise(res)) if (options.errorHandler) try {
+        res = await res;
+      } catch (err) {
+        const errRes = await options.errorHandler(err);
+        if (!errRes) return;
+        res = errRes;
+      }
+      else res = await res.catch(handleFetchError);
+      if (cacheKey in res) return responseViaCache(res, outgoing);
+      const resHeaderRecord = buildOutgoingHttpHeaders(res.headers, res.body === null ? void 0 : defaultContentType);
+      if (res.body) {
+        const reader = res.body.getReader();
+        const values2 = [];
+        let done = false;
+        let currentReadPromise = void 0;
+        if (resHeaderRecord["transfer-encoding"] !== "chunked") {
+          let maxReadCount = 2;
+          for (let i = 0; i < maxReadCount; i++) {
+            currentReadPromise ||= reader.read();
+            const chunk = await readWithoutBlocking(currentReadPromise);
+            if (!chunk) {
+              if (i === 1) {
+                await new Promise((resolve) => setTimeout(resolve));
+                maxReadCount = 3;
+                continue;
+              }
+              break;
+            }
+            currentReadPromise = void 0;
+            if (chunk.value) values2.push(chunk.value);
+            if (chunk.done) {
+              done = true;
+              break;
+            }
+          }
+          if (done && !("content-length" in resHeaderRecord)) resHeaderRecord["content-length"] = values2.reduce((acc, value) => acc + value.length, 0);
+        }
+        outgoing.writeHead(res.status, resHeaderRecord);
+        values2.forEach((value) => {
+          outgoing.write(value);
+        });
+        if (done) outgoing.end();
+        else {
+          if (values2.length === 0) flushHeaders(outgoing);
+          await writeFromReadableStreamDefaultReader(reader, outgoing, currentReadPromise);
+        }
+      } else if (resHeaderRecord[require_constants.X_ALREADY_SENT]) {
+      } else {
+        outgoing.writeHead(res.status, resHeaderRecord);
+        outgoing.end();
+      }
+      outgoing[outgoingEnded]?.();
+    };
+    var getRequestListener = (fetchCallback, options = {}) => {
+      const autoCleanupIncoming = options.autoCleanupIncoming ?? true;
+      if (options.overrideGlobalObjects !== false && global.Request !== Request$1) {
+        Object.defineProperty(global, "Request", { value: Request$1 });
+        Object.defineProperty(global, "Response", { value: Response$1 });
+      }
+      return async (incoming, outgoing) => {
+        let res, req;
+        let needsBodyCleanup = false;
+        let closeHandlerAttached = false;
+        const ensureCloseHandler = () => {
+          if (!req || closeHandlerAttached) return;
+          closeHandlerAttached = true;
+          outgoing.on("close", makeCloseHandler(req, incoming, outgoing, needsBodyCleanup));
+        };
+        try {
+          req = newRequest(incoming, options.hostname);
+          needsBodyCleanup = autoCleanupIncoming && !(incoming.method === "GET" || incoming.method === "HEAD");
+          if (needsBodyCleanup) {
+            incoming[wrapBodyStream] = true;
+            if (incoming instanceof node_http2.Http2ServerRequest) outgoing[outgoingEnded] = () => {
+              if (!incoming.readableEnded) setTimeout(() => {
+                if (!incoming.readableEnded) setTimeout(() => {
+                  incoming.destroy();
+                  outgoing.destroy();
+                });
+              });
+            };
+          }
+          res = fetchCallback(req, {
+            incoming,
+            outgoing
+          });
+          if (!isPromise(res) && isImmediateCacheableResponse(res)) {
+            if (needsBodyCleanup && !incoming.readableEnded) outgoing.once("finish", () => {
+              if (!incoming.readableEnded) drainIncoming(incoming);
+            });
+            return responseViaCache(res, outgoing);
+          }
+          ensureCloseHandler();
+        } catch (e) {
+          if (!res) if (options.errorHandler) {
+            ensureCloseHandler();
+            res = await options.errorHandler(req ? e : toRequestError(e));
+            if (!res) return;
+          } else if (!req) res = handleRequestError();
+          else res = handleFetchError(e);
+          else return handleResponseError(e, outgoing);
+        }
+        try {
+          return await responseViaResponseObject(res, outgoing, options);
+        } catch (e) {
+          return handleResponseError(e, outgoing);
+        }
+      };
+    };
+    var CloseEvent = globalThis.CloseEvent ?? class extends Event {
+      #eventInitDict;
+      constructor(type, eventInitDict = {}) {
+        super(type, eventInitDict);
+        this.#eventInitDict = eventInitDict;
+      }
+      get wasClean() {
+        return this.#eventInitDict.wasClean ?? false;
+      }
+      get code() {
+        return this.#eventInitDict.code ?? 0;
+      }
+      get reason() {
+        return this.#eventInitDict.reason ?? "";
+      }
+    };
+    var ErrorEvent = globalThis.ErrorEvent ?? class extends Event {
+      #eventInitDict;
+      constructor(type, eventInitDict = {}) {
+        super(type, eventInitDict);
+        this.#eventInitDict = eventInitDict;
+      }
+      get message() {
+        return this.#eventInitDict.message ?? "";
+      }
+      get filename() {
+        return this.#eventInitDict.filename ?? "";
+      }
+      get lineno() {
+        return this.#eventInitDict.lineno ?? 0;
+      }
+      get colno() {
+        return this.#eventInitDict.colno ?? 0;
+      }
+      get error() {
+        return this.#eventInitDict.error ?? null;
+      }
+    };
+    var generateConnectionSymbol = () => /* @__PURE__ */ Symbol("connection");
+    var CONNECTION_SYMBOL_KEY = /* @__PURE__ */ Symbol("CONNECTION_SYMBOL_KEY");
+    var WAIT_FOR_WEBSOCKET_SYMBOL = /* @__PURE__ */ Symbol("WAIT_FOR_WEBSOCKET_SYMBOL");
+    var responseHeadersToSkip = /* @__PURE__ */ new Set([
+      "connection",
+      "content-length",
+      "keep-alive",
+      "proxy-authenticate",
+      "proxy-authorization",
+      "te",
+      "trailer",
+      "transfer-encoding",
+      "upgrade",
+      "sec-websocket-accept",
+      "sec-websocket-extensions",
+      "sec-websocket-protocol"
+    ]);
+    var appendResponseHeaders = (headers, responseHeaders) => {
+      if (!responseHeaders) return;
+      responseHeaders.forEach((value, key) => {
+        if (responseHeadersToSkip.has(key.toLowerCase())) return;
+        headers.push(`${key}: ${value}`);
+      });
+    };
+    var rejectUpgradeRequest = (socket, status, responseHeaders) => {
+      if (socket.destroyed) return;
+      const responseLines = ["Connection: close", "Content-Length: 0"];
+      appendResponseHeaders(responseLines, responseHeaders);
+      socket.end(`HTTP/1.1 ${status.toString()} ${node_http.STATUS_CODES[status] ?? ""}\r
+${responseLines.join("\r\n")}\r
+\r
+`);
+    };
+    var createUpgradeRequest = (request) => {
+      const protocol = request.socket.encrypted ? "https" : "http";
+      const incomingUrl = request.url ?? "/";
+      let url;
+      if (incomingUrl[0] !== "/" && (incomingUrl.startsWith("http://") || incomingUrl.startsWith("https://"))) {
+        validateRequestTarget(incomingUrl);
+        url = new URL(incomingUrl).href;
+      } else url = buildUrl(protocol, request.headers.host ?? "localhost", incomingUrl);
+      const headers = new Headers();
+      for (const key in request.headers) {
+        const value = request.headers[key];
+        if (!value) continue;
+        headers.append(key, Array.isArray(value) ? value[0] : value);
+      }
+      return new Request(url, { headers });
+    };
+    var setupWebSocket = (options) => {
+      const { server, fetchCallback, wss } = options;
+      const waiterMap = /* @__PURE__ */ new Map();
+      wss.on("connection", (ws, request) => {
+        const waiter = waiterMap.get(request);
+        if (waiter) {
+          waiter.resolve(ws);
+          waiterMap.delete(request);
+        }
+      });
+      const rejectWaiter = (request) => {
+        const waiter = waiterMap.get(request);
+        if (waiter) {
+          waiterMap.delete(request);
+          waiter.reject(/* @__PURE__ */ new Error("WebSocket handshake aborted"));
+        }
+      };
+      const waitForWebSocket = (request, connectionSymbol) => {
+        return new Promise((resolve, reject) => {
+          waiterMap.set(request, {
+            resolve,
+            reject,
+            connectionSymbol
+          });
+        });
+      };
+      server.on("upgrade", async (request, socket, head) => {
+        const ignoreSocketError = () => {
+        };
+        socket.on("error", ignoreSocketError);
+        if (request.headers.upgrade?.toLowerCase() !== "websocket") {
+          if (server.listenerCount("upgrade") === 1) rejectUpgradeRequest(socket, 400);
+          return;
+        }
+        const reclaimWaiterOnClose = () => rejectWaiter(request);
+        socket.once("close", reclaimWaiterOnClose);
+        const env = {
+          incoming: request,
+          outgoing: void 0,
+          wss,
+          [WAIT_FOR_WEBSOCKET_SYMBOL]: waitForWebSocket
+        };
+        let status = 400;
+        let responseHeaders;
+        try {
+          const response = await fetchCallback(createUpgradeRequest(request), env);
+          if (response instanceof Response) {
+            status = response.status;
+            responseHeaders = response.headers;
+          }
+        } catch (error) {
+          if (server.listenerCount("upgrade") === 1) rejectUpgradeRequest(socket, error instanceof RequestError ? 400 : 500);
+          return;
+        }
+        if (socket.destroyed) {
+          rejectWaiter(request);
+          return;
+        }
+        const waiter = waiterMap.get(request);
+        if (!waiter || waiter.connectionSymbol !== env[CONNECTION_SYMBOL_KEY]) {
+          rejectWaiter(request);
+          if (server.listenerCount("upgrade") === 1) rejectUpgradeRequest(socket, status, responseHeaders);
+          return;
+        }
+        const addResponseHeaders = (headers) => {
+          appendResponseHeaders(headers, responseHeaders);
+        };
+        wss.on("headers", addResponseHeaders);
+        try {
+          wss.handleUpgrade(request, socket, head, (ws) => {
+            socket.off("close", reclaimWaiterOnClose);
+            socket.off("error", ignoreSocketError);
+            wss.emit("connection", ws, request);
+          });
+        } finally {
+          wss.off("headers", addResponseHeaders);
+        }
+      });
+      server.on("close", () => {
+        wss.close();
+      });
+    };
+    var upgradeWebSocket = (0, hono_ws.defineWebSocketHelper)(async (c, events, options) => {
+      if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return;
+      const env = c.env;
+      const waitForWebSocket = env[WAIT_FOR_WEBSOCKET_SYMBOL];
+      if (!waitForWebSocket || !env.incoming) return new Response(null, { status: 500 });
+      const connectionSymbol = generateConnectionSymbol();
+      env[CONNECTION_SYMBOL_KEY] = connectionSymbol;
+      (async () => {
+        let ws;
+        try {
+          ws = await waitForWebSocket(env.incoming, connectionSymbol);
+        } catch {
+          return;
+        }
+        const messagesReceivedInStarting = [];
+        const bufferMessage = (data, isBinary) => {
+          messagesReceivedInStarting.push([data, isBinary]);
+        };
+        ws.on("message", bufferMessage);
+        const ctx = {
+          binaryType: "arraybuffer",
+          close(code, reason) {
+            ws.close(code, reason);
+          },
+          protocol: ws.protocol,
+          raw: ws,
+          get readyState() {
+            return ws.readyState;
+          },
+          send(source2, opts) {
+            ws.send(source2, { compress: opts?.compress });
+          },
+          url: new URL(c.req.url)
+        };
+        try {
+          events?.onOpen?.(new Event("open"), ctx);
+        } catch (e) {
+          (options?.onError ?? console.error)(e);
+        }
+        const handleMessage = (data, isBinary) => {
+          const datas = Array.isArray(data) ? data : [data];
+          for (const data2 of datas) try {
+            events?.onMessage?.(new MessageEvent("message", { data: isBinary ? data2 instanceof ArrayBuffer ? data2 : data2.buffer.slice(data2.byteOffset, data2.byteOffset + data2.byteLength) : typeof data2 === "string" ? data2 : Buffer.from(data2).toString("utf-8") }), ctx);
+          } catch (e) {
+            (options?.onError ?? console.error)(e);
+          }
+        };
+        ws.off("message", bufferMessage);
+        for (const message of messagesReceivedInStarting) handleMessage(...message);
+        ws.on("message", (data, isBinary) => {
+          handleMessage(data, isBinary);
+        });
+        ws.on("close", (code, reason) => {
+          try {
+            events?.onClose?.(new CloseEvent("close", {
+              code,
+              reason: reason.toString()
+            }), ctx);
+          } catch (e) {
+            (options?.onError ?? console.error)(e);
+          }
+        });
+        ws.on("error", (error) => {
+          try {
+            events?.onError?.(new ErrorEvent("error", { error }), ctx);
+          } catch (e) {
+            (options?.onError ?? console.error)(e);
+          }
+        });
+      })();
+      return new Response();
+    });
+    var createAdaptorServer = (options) => {
+      const fetchCallback = options.fetch;
+      const requestListener = getRequestListener(fetchCallback, {
+        hostname: options.hostname,
+        overrideGlobalObjects: options.overrideGlobalObjects,
+        autoCleanupIncoming: options.autoCleanupIncoming
+      });
+      const server = (options.createServer || node_http.createServer)(options.serverOptions || {}, requestListener);
+      if (options.websocket && options.websocket.server) {
+        if (options.websocket.server.options.noServer !== true) throw new Error("WebSocket server must be created with { noServer: true } option");
+        setupWebSocket({
+          server,
+          fetchCallback,
+          wss: options.websocket.server
+        });
+      }
+      return server;
+    };
+    var serve = (options, listeningListener) => {
+      const server = createAdaptorServer(options);
+      server.listen(options?.port ?? 3e3, options.hostname, () => {
+        const serverInfo = server.address();
+        listeningListener && listeningListener(serverInfo);
+      });
+      return server;
+    };
+    exports2.RequestError = RequestError;
+    exports2.createAdaptorServer = createAdaptorServer;
+    exports2.getRequestListener = getRequestListener;
+    exports2.serve = serve;
+    exports2.upgradeWebSocket = upgradeWebSocket;
+  }
+});
+
+// work/build/node_modules/content-type/index.js
+var require_content_type = __commonJS({
+  "work/build/node_modules/content-type/index.js"(exports2) {
+    "use strict";
+    var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g;
+    var TEXT_REGEXP = /^[\u000b\u0020-\u007e\u0080-\u00ff]+$/;
+    var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+    var QESC_REGEXP = /\\([\u000b\u0020-\u00ff])/g;
+    var QUOTE_REGEXP = /([\\"])/g;
+    var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+    exports2.format = format;
+    exports2.parse = parse;
+    function format(obj) {
+      if (!obj || typeof obj !== "object") {
+        throw new TypeError("argument obj is required");
+      }
+      var parameters = obj.parameters;
+      var type = obj.type;
+      if (!type || !TYPE_REGEXP.test(type)) {
+        throw new TypeError("invalid type");
+      }
+      var string = type;
+      if (parameters && typeof parameters === "object") {
+        var param;
+        var params = Object.keys(parameters).sort();
+        for (var i = 0; i < params.length; i++) {
+          param = params[i];
+          if (!TOKEN_REGEXP.test(param)) {
+            throw new TypeError("invalid parameter name");
+          }
+          string += "; " + param + "=" + qstring(parameters[param]);
+        }
+      }
+      return string;
+    }
+    function parse(string) {
+      if (!string) {
+        throw new TypeError("argument string is required");
+      }
+      var header = typeof string === "object" ? getcontenttype(string) : string;
+      if (typeof header !== "string") {
+        throw new TypeError("argument string is required to be a string");
+      }
+      var index = header.indexOf(";");
+      var type = index !== -1 ? header.slice(0, index).trim() : header.trim();
+      if (!TYPE_REGEXP.test(type)) {
+        throw new TypeError("invalid media type");
+      }
+      var obj = new ContentType(type.toLowerCase());
+      if (index !== -1) {
+        var key;
+        var match;
+        var value;
+        PARAM_REGEXP.lastIndex = index;
+        while (match = PARAM_REGEXP.exec(header)) {
+          if (match.index !== index) {
+            throw new TypeError("invalid parameter format");
+          }
+          index += match[0].length;
+          key = match[1].toLowerCase();
+          value = match[2];
+          if (value.charCodeAt(0) === 34) {
+            value = value.slice(1, -1);
+            if (value.indexOf("\\") !== -1) {
+              value = value.replace(QESC_REGEXP, "$1");
+            }
+          }
+          obj.parameters[key] = value;
+        }
+        if (index !== header.length) {
+          throw new TypeError("invalid parameter format");
+        }
+      }
+      return obj;
+    }
+    function getcontenttype(obj) {
+      var header;
+      if (typeof obj.getHeader === "function") {
+        header = obj.getHeader("content-type");
+      } else if (typeof obj.headers === "object") {
+        header = obj.headers && obj.headers["content-type"];
+      }
+      if (typeof header !== "string") {
+        throw new TypeError("content-type header is missing from object");
+      }
+      return header;
+    }
+    function qstring(val) {
+      var str = String(val);
+      if (TOKEN_REGEXP.test(str)) {
+        return str;
+      }
+      if (str.length > 0 && !TEXT_REGEXP.test(str)) {
+        throw new TypeError("invalid parameter value");
+      }
+      return '"' + str.replace(QUOTE_REGEXP, "\\$1") + '"';
+    }
+    function ContentType(type) {
+      this.parameters = /* @__PURE__ */ Object.create(null);
+      this.type = type;
+    }
+  }
+});
+
+// work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/shared/mediaType.js
+var require_mediaType = __commonJS({
+  "work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/shared/mediaType.js"(exports2) {
+    "use strict";
+    var __importDefault = exports2 && exports2.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.mediaTypeEssence = mediaTypeEssence;
+    exports2.isJsonContentType = isJsonContentType;
+    var content_type_1 = __importDefault(require_content_type());
+    function mediaTypeEssence(header) {
+      if (!header) {
+        return void 0;
+      }
+      try {
+        return content_type_1.default.parse(header).type;
+      } catch {
+        const essence = (header.split(";", 1)[0] ?? "").trim().toLowerCase();
+        if (essence === "" || header.slice(essence.length).includes(",")) {
+          return void 0;
+        }
+        return essence;
+      }
+    }
+    function isJsonContentType(header) {
+      if (header === "application/json") {
+        return true;
+      }
+      return mediaTypeEssence(header) === "application/json";
+    }
+  }
+});
+
+// work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/requestBody.js
+var require_requestBody = __commonJS({
+  "work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/requestBody.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.MAX_BATCH_SIZE = exports2.DEFAULT_MAX_REQUEST_BODY_SIZE = void 0;
+    exports2.requestBodyTooLargeMessage = requestBodyTooLargeMessage;
+    exports2.resolveMaxRequestBodySize = resolveMaxRequestBodySize;
+    exports2.readRequestBody = readRequestBody;
+    exports2.DEFAULT_MAX_REQUEST_BODY_SIZE = 4 * 1024 * 1024;
+    exports2.MAX_BATCH_SIZE = 100;
+    function requestBodyTooLargeMessage(maxBytes) {
+      return `Payload Too Large: Request body must not exceed ${maxBytes} bytes`;
+    }
+    function resolveMaxRequestBodySize(value) {
+      if (value === void 0) {
+        return exports2.DEFAULT_MAX_REQUEST_BODY_SIZE;
+      }
+      if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+        throw new RangeError(`maxRequestBodySize must be a positive number of bytes, got ${String(value)}`);
+      }
+      return value;
+    }
+    async function readRequestBody(request, maxBytes = exports2.DEFAULT_MAX_REQUEST_BODY_SIZE) {
+      if (Number(request.headers.get("content-length")) > maxBytes) {
+        return { tooLarge: true };
+      }
+      if (request.body === null) {
+        return { tooLarge: false, text: "" };
+      }
+      const reader = request.body.getReader();
+      const decoder = new TextDecoder();
+      let received = 0;
+      let text2 = "";
+      try {
+        for (; ; ) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          received += value.byteLength;
+          if (received > maxBytes) {
+            return { tooLarge: true };
+          }
+          text2 += decoder.decode(value, { stream: true });
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      return { tooLarge: false, text: text2 + decoder.decode() };
+    }
+  }
+});
+
+// work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/sseKeepAlive.js
+var require_sseKeepAlive = __commonJS({
+  "work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/sseKeepAlive.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.DEFAULT_SSE_KEEP_ALIVE_MS = void 0;
+    exports2.armSseKeepAlive = armSseKeepAlive;
+    exports2.DEFAULT_SSE_KEEP_ALIVE_MS = 15e3;
+    var MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+    function armSseKeepAlive(intervalMs, onTick) {
+      if (!Number.isFinite(intervalMs) || intervalMs < 1) {
+        return void 0;
+      }
+      const timer = setInterval(onTick, Math.min(intervalMs, MAX_TIMER_DELAY_MS));
+      timer.unref?.();
+      return timer;
+    }
+  }
+});
+
+// work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/webStandardStreamableHttp.js
+var require_webStandardStreamableHttp = __commonJS({
+  "work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/webStandardStreamableHttp.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.WebStandardStreamableHTTPServerTransport = void 0;
+    var mediaType_js_1 = require_mediaType();
+    var requestBody_js_1 = require_requestBody();
+    var sseKeepAlive_js_1 = require_sseKeepAlive();
+    var types_js_1 = require_types2();
+    var WebStandardStreamableHTTPServerTransport = class {
+      constructor(options = {}) {
+        this._started = false;
+        this._hasHandledRequest = false;
+        this._streamMapping = /* @__PURE__ */ new Map();
+        this._requestToStreamMapping = /* @__PURE__ */ new Map();
+        this._resumableStreams = /* @__PURE__ */ new Set();
+        this._requestResponseMap = /* @__PURE__ */ new Map();
+        this._initialized = false;
+        this._enableJsonResponse = false;
+        this._standaloneSseStreamId = "_GET_stream";
+        this._closed = false;
+        this.sessionIdGenerator = options.sessionIdGenerator;
+        this._enableJsonResponse = options.enableJsonResponse ?? false;
+        this._eventStore = options.eventStore;
+        this._onsessioninitialized = options.onsessioninitialized;
+        this._onsessionclosed = options.onsessionclosed;
+        this._allowedHosts = options.allowedHosts;
+        this._allowedOrigins = options.allowedOrigins;
+        this._enableDnsRebindingProtection = options.enableDnsRebindingProtection ?? false;
+        this._retryInterval = options.retryInterval;
+        this._keepAliveMs = options.keepAliveMs ?? sseKeepAlive_js_1.DEFAULT_SSE_KEEP_ALIVE_MS;
+        this._maxRequestBodySize = (0, requestBody_js_1.resolveMaxRequestBodySize)(options.maxRequestBodySize);
+      }
+      /**
+       * Arms a keep-alive interval for an SSE stream that periodically writes an SSE
+       * comment frame so intermediaries and idle timeouts don't kill the connection.
+       * The returned timer is owned by the stream it was armed for: the stream's
+       * cancel/cleanup callbacks must clear it. The interval clears itself if a
+       * write fails (stream already closed/cancelled).
+       */
+      startKeepAlive(controller, encoder) {
+        if (this._closed)
+          return void 0;
+        const timer = (0, sseKeepAlive_js_1.armSseKeepAlive)(this._keepAliveMs, () => {
+          try {
+            controller.enqueue(encoder.encode(": keepalive\n\n"));
+          } catch {
+            if (timer !== void 0)
+              clearInterval(timer);
+          }
+        });
+        return timer;
+      }
+      /**
+       * Starts the transport. This is required by the Transport interface but is a no-op
+       * for the Streamable HTTP transport as connections are managed per-request.
+       */
+      async start() {
+        if (this._started) {
+          throw new Error("Transport already started");
+        }
+        this._started = true;
+      }
+      /**
+       * Helper to create a JSON error response
+       */
+      createJsonErrorResponse(status, code, message, options) {
+        const error = { code, message };
+        if (options?.data !== void 0) {
+          error.data = options.data;
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          error,
+          id: null
+        }), {
+          status,
+          headers: {
+            "Content-Type": "application/json",
+            ...options?.headers
+          }
+        });
+      }
+      /**
+       * Validates request headers for DNS rebinding protection.
+       * @returns Error response if validation fails, undefined if validation passes.
+       */
+      validateRequestHeaders(req) {
+        if (!this._enableDnsRebindingProtection) {
+          return void 0;
+        }
+        if (this._allowedHosts && this._allowedHosts.length > 0) {
+          const hostHeader = req.headers.get("host");
+          if (!hostHeader || !this._allowedHosts.includes(hostHeader)) {
+            const error = `Invalid Host header: ${hostHeader}`;
+            this.onerror?.(new Error(error));
+            return this.createJsonErrorResponse(403, -32e3, error);
+          }
+        }
+        if (this._allowedOrigins && this._allowedOrigins.length > 0) {
+          const originHeader = req.headers.get("origin");
+          if (originHeader && !this._allowedOrigins.includes(originHeader)) {
+            const error = `Invalid Origin header: ${originHeader}`;
+            this.onerror?.(new Error(error));
+            return this.createJsonErrorResponse(403, -32e3, error);
+          }
+        }
+        return void 0;
+      }
+      /**
+       * Handles an incoming HTTP request, whether GET, POST, or DELETE
+       * Returns a Response object (Web Standard)
+       */
+      async handleRequest(req, options) {
+        if (this._closed) {
+          return this.createJsonErrorResponse(404, -32001, "Session not found");
+        }
+        if (!this.sessionIdGenerator && this._hasHandledRequest) {
+          throw new Error("Stateless transport cannot be reused across requests. Create a new transport per request.");
+        }
+        this._hasHandledRequest = true;
+        const validationError = this.validateRequestHeaders(req);
+        if (validationError) {
+          return validationError;
+        }
+        switch (req.method) {
+          case "POST":
+            return this.handlePostRequest(req, options);
+          case "GET":
+            return this.handleGetRequest(req);
+          case "DELETE":
+            return this.handleDeleteRequest(req);
+          default:
+            return this.handleUnsupportedRequest();
+        }
+      }
+      /**
+       * Writes a priming event to establish resumption capability.
+       * Only sends if eventStore is configured (opt-in for resumability) and
+       * the client's protocol version supports empty SSE data (>= 2025-11-25).
+       */
+      async writePrimingEvent(controller, encoder, streamId, protocolVersion) {
+        if (!this._eventStore) {
+          return;
+        }
+        if (protocolVersion < "2025-11-25") {
+          return;
+        }
+        const primingEventId = await this._eventStore.storeEvent(streamId, {});
+        let primingEvent = `id: ${primingEventId}
+data: 
+
+`;
+        if (this._retryInterval !== void 0) {
+          primingEvent = `id: ${primingEventId}
+retry: ${this._retryInterval}
+data: 
+
+`;
+        }
+        controller.enqueue(encoder.encode(primingEvent));
+        this._resumableStreams.add(streamId);
+      }
+      /**
+       * Handles GET requests for SSE stream
+       */
+      async handleGetRequest(req) {
+        const acceptHeader = req.headers.get("accept");
+        if (!acceptHeader?.includes("text/event-stream")) {
+          this.onerror?.(new Error("Not Acceptable: Client must accept text/event-stream"));
+          return this.createJsonErrorResponse(406, -32e3, "Not Acceptable: Client must accept text/event-stream");
+        }
+        const sessionError = this.validateSession(req);
+        if (sessionError) {
+          return sessionError;
+        }
+        const protocolError = this.validateProtocolVersion(req);
+        if (protocolError) {
+          return protocolError;
+        }
+        if (this._eventStore) {
+          const lastEventId = req.headers.get("last-event-id");
+          if (lastEventId) {
+            return this.replayEvents(lastEventId);
+          }
+        }
+        if (this._streamMapping.get(this._standaloneSseStreamId) !== void 0) {
+          this.onerror?.(new Error("Conflict: Only one SSE stream is allowed per session"));
+          return this.createJsonErrorResponse(409, -32e3, "Conflict: Only one SSE stream is allowed per session");
+        }
+        const encoder = new TextEncoder();
+        let streamController;
+        let keepAliveTimer = void 0;
+        const readable = new ReadableStream({
+          start: (controller) => {
+            streamController = controller;
+          },
+          cancel: () => {
+            if (keepAliveTimer !== void 0) {
+              clearInterval(keepAliveTimer);
+            }
+            if (this._streamMapping.get(this._standaloneSseStreamId)?.controller === streamController) {
+              this._streamMapping.delete(this._standaloneSseStreamId);
+            }
+          }
+        });
+        const headers = {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no"
+        };
+        if (this.sessionId !== void 0) {
+          headers["mcp-session-id"] = this.sessionId;
+        }
+        this._streamMapping.set(this._standaloneSseStreamId, {
+          controller: streamController,
+          encoder,
+          cleanup: () => {
+            if (keepAliveTimer !== void 0) {
+              clearInterval(keepAliveTimer);
+            }
+            this._streamMapping.delete(this._standaloneSseStreamId);
+            try {
+              streamController.close();
+            } catch {
+            }
+          }
+        });
+        keepAliveTimer = this.startKeepAlive(streamController, encoder);
+        return new Response(readable, { headers });
+      }
+      /**
+       * Replays events that would have been sent after the specified event ID
+       * Only used when resumability is enabled
+       */
+      async replayEvents(lastEventId) {
+        if (!this._eventStore) {
+          this.onerror?.(new Error("Event store not configured"));
+          return this.createJsonErrorResponse(400, -32e3, "Event store not configured");
+        }
+        try {
+          let streamId;
+          if (this._eventStore.getStreamIdForEventId) {
+            streamId = await this._eventStore.getStreamIdForEventId(lastEventId);
+            if (!streamId) {
+              this.onerror?.(new Error("Invalid event ID format"));
+              return this.createJsonErrorResponse(400, -32e3, "Invalid event ID format");
+            }
+            if (this._streamMapping.get(streamId) !== void 0) {
+              this.onerror?.(new Error("Conflict: Stream already has an active connection"));
+              return this.createJsonErrorResponse(409, -32e3, "Conflict: Stream already has an active connection");
+            }
+          }
+          const headers = {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no"
+          };
+          if (this.sessionId !== void 0) {
+            headers["mcp-session-id"] = this.sessionId;
+          }
+          const encoder = new TextEncoder();
+          let streamController;
+          let keepAliveTimer = void 0;
+          let replayedStreamId = void 0;
+          let cancelled = false;
+          const readable = new ReadableStream({
+            start: (controller) => {
+              streamController = controller;
+            },
+            cancel: () => {
+              cancelled = true;
+              if (keepAliveTimer !== void 0) {
+                clearInterval(keepAliveTimer);
+              }
+              if (replayedStreamId !== void 0 && this._streamMapping.get(replayedStreamId)?.controller === streamController) {
+                this._streamMapping.delete(replayedStreamId);
+              }
+            }
+          });
+          const replayedEventIds = /* @__PURE__ */ new Set();
+          replayedStreamId = await this._eventStore.replayEventsAfter(lastEventId, {
+            send: async (eventId, message) => {
+              const success = this.writeSSEEvent(streamController, encoder, message, eventId);
+              if (!success) {
+                this.onerror?.(new Error("Failed replay events"));
+                try {
+                  streamController.close();
+                } catch {
+                }
+              } else {
+                replayedEventIds.add(eventId);
+              }
+            }
+          });
+          if (this._closed || cancelled) {
+            try {
+              streamController.close();
+            } catch {
+            }
+            return this.createJsonErrorResponse(404, -32001, "Session not found");
+          }
+          this._streamMapping.get(replayedStreamId)?.cleanup();
+          this._streamMapping.set(replayedStreamId, {
+            controller: streamController,
+            encoder,
+            replayedEventIds,
+            cleanup: () => {
+              if (keepAliveTimer !== void 0) {
+                clearInterval(keepAliveTimer);
+              }
+              this._streamMapping.delete(replayedStreamId);
+              try {
+                streamController.close();
+              } catch {
+              }
+            }
+          });
+          this._resumableStreams.add(replayedStreamId);
+          keepAliveTimer = this.startKeepAlive(streamController, encoder);
+          return new Response(readable, { headers });
+        } catch (error) {
+          this.onerror?.(error);
+          return this.createJsonErrorResponse(500, -32e3, "Error replaying events");
+        }
+      }
+      /**
+       * Writes an event to an SSE stream via controller with proper formatting
+       */
+      writeSSEEvent(controller, encoder, message, eventId) {
+        try {
+          let eventData = `event: message
+`;
+          if (eventId) {
+            eventData += `id: ${eventId}
+`;
+          }
+          eventData += `data: ${JSON.stringify(message)}
+
+`;
+          controller.enqueue(encoder.encode(eventData));
+          return true;
+        } catch (error) {
+          this.onerror?.(error);
+          return false;
+        }
+      }
+      /**
+       * Handles unsupported requests (PUT, PATCH, etc.)
+       */
+      handleUnsupportedRequest() {
+        this.onerror?.(new Error("Method not allowed."));
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          error: {
+            code: -32e3,
+            message: "Method not allowed."
+          },
+          id: null
+        }), {
+          status: 405,
+          headers: {
+            Allow: "GET, POST, DELETE",
+            "Content-Type": "application/json"
+          }
+        });
+      }
+      /**
+       * Handles POST requests containing JSON-RPC messages
+       */
+      async handlePostRequest(req, options) {
+        try {
+          const acceptHeader = req.headers.get("accept");
+          if (!acceptHeader?.includes("application/json") || !acceptHeader.includes("text/event-stream")) {
+            this.onerror?.(new Error("Not Acceptable: Client must accept both application/json and text/event-stream"));
+            return this.createJsonErrorResponse(406, -32e3, "Not Acceptable: Client must accept both application/json and text/event-stream");
+          }
+          const ct = req.headers.get("content-type");
+          if (!(0, mediaType_js_1.isJsonContentType)(ct)) {
+            this.onerror?.(new Error("Unsupported Media Type: Content-Type must be application/json"));
+            return this.createJsonErrorResponse(415, -32e3, "Unsupported Media Type: Content-Type must be application/json");
+          }
+          const requestInfo = {
+            headers: Object.fromEntries(req.headers.entries()),
+            url: new URL(req.url)
+          };
+          let rawMessage;
+          if (options?.parsedBody !== void 0) {
+            rawMessage = options.parsedBody;
+          } else {
+            try {
+              const body = await (0, requestBody_js_1.readRequestBody)(req, this._maxRequestBodySize);
+              if (body.tooLarge) {
+                const message = (0, requestBody_js_1.requestBodyTooLargeMessage)(this._maxRequestBodySize);
+                this.onerror?.(new Error(message));
+                return this.createJsonErrorResponse(413, -32e3, message);
+              }
+              rawMessage = JSON.parse(body.text);
+            } catch {
+              this.onerror?.(new Error("Parse error: Invalid JSON"));
+              return this.createJsonErrorResponse(400, -32700, "Parse error: Invalid JSON");
+            }
+          }
+          if (Array.isArray(rawMessage) && rawMessage.length > requestBody_js_1.MAX_BATCH_SIZE) {
+            this.onerror?.(new Error(`Invalid Request: Batch must not exceed ${requestBody_js_1.MAX_BATCH_SIZE} messages`));
+            return this.createJsonErrorResponse(400, -32600, `Invalid Request: Batch must not exceed ${requestBody_js_1.MAX_BATCH_SIZE} messages`);
+          }
+          let messages;
+          try {
+            if (Array.isArray(rawMessage)) {
+              messages = rawMessage.map((msg) => types_js_1.JSONRPCMessageSchema.parse(msg));
+            } else {
+              messages = [types_js_1.JSONRPCMessageSchema.parse(rawMessage)];
+            }
+          } catch {
+            this.onerror?.(new Error("Parse error: Invalid JSON-RPC message"));
+            return this.createJsonErrorResponse(400, -32700, "Parse error: Invalid JSON-RPC message");
+          }
+          if (this._closed) {
+            return this.createJsonErrorResponse(404, -32001, "Session not found");
+          }
+          const isInitializationRequest = messages.some(types_js_1.isInitializeRequest);
+          if (isInitializationRequest) {
+            if (this._initialized && this.sessionId !== void 0) {
+              this.onerror?.(new Error("Invalid Request: Server already initialized"));
+              return this.createJsonErrorResponse(400, -32600, "Invalid Request: Server already initialized");
+            }
+            if (messages.length > 1) {
+              this.onerror?.(new Error("Invalid Request: Only one initialization request is allowed"));
+              return this.createJsonErrorResponse(400, -32600, "Invalid Request: Only one initialization request is allowed");
+            }
+            this.sessionId = this.sessionIdGenerator?.();
+            this._initialized = true;
+            if (this.sessionId && this._onsessioninitialized) {
+              await Promise.resolve(this._onsessioninitialized(this.sessionId));
+            }
+          }
+          if (!isInitializationRequest) {
+            const sessionError = this.validateSession(req);
+            if (sessionError) {
+              return sessionError;
+            }
+            const protocolError = this.validateProtocolVersion(req);
+            if (protocolError) {
+              return protocolError;
+            }
+          }
+          if (this._closed) {
+            return this.createJsonErrorResponse(404, -32001, "Session not found");
+          }
+          const hasRequests = messages.some(types_js_1.isJSONRPCRequest);
+          if (!hasRequests) {
+            for (const message of messages) {
+              this.onmessage?.(message, { authInfo: options?.authInfo, requestInfo });
+            }
+            return new Response(null, { status: 202 });
+          }
+          const streamId = crypto.randomUUID();
+          const initRequest = messages.find((m) => (0, types_js_1.isInitializeRequest)(m));
+          const clientProtocolVersion = initRequest ? initRequest.params.protocolVersion : req.headers.get("mcp-protocol-version") ?? types_js_1.DEFAULT_NEGOTIATED_PROTOCOL_VERSION;
+          if (this._enableJsonResponse) {
+            return new Promise((resolve) => {
+              this._streamMapping.set(streamId, {
+                resolveJson: resolve,
+                cleanup: () => {
+                  this._streamMapping.delete(streamId);
+                }
+              });
+              for (const message of messages) {
+                if ((0, types_js_1.isJSONRPCRequest)(message)) {
+                  this._requestToStreamMapping.set(message.id, streamId);
+                }
+              }
+              for (const message of messages) {
+                this.onmessage?.(message, { authInfo: options?.authInfo, requestInfo });
+              }
+            });
+          }
+          const encoder = new TextEncoder();
+          let streamController;
+          let keepAliveTimer = void 0;
+          const readable = new ReadableStream({
+            start: (controller) => {
+              streamController = controller;
+            },
+            cancel: () => {
+              if (keepAliveTimer !== void 0) {
+                clearInterval(keepAliveTimer);
+              }
+              if (this._streamMapping.get(streamId)?.controller === streamController) {
+                this._streamMapping.delete(streamId);
+              }
+            }
+          });
+          const headers = {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no"
+          };
+          if (this.sessionId !== void 0) {
+            headers["mcp-session-id"] = this.sessionId;
+          }
+          for (const message of messages) {
+            if ((0, types_js_1.isJSONRPCRequest)(message)) {
+              this._streamMapping.set(streamId, {
+                controller: streamController,
+                encoder,
+                cleanup: () => {
+                  if (keepAliveTimer !== void 0) {
+                    clearInterval(keepAliveTimer);
+                  }
+                  this._streamMapping.delete(streamId);
+                  try {
+                    streamController.close();
+                  } catch {
+                  }
+                }
+              });
+              this._requestToStreamMapping.set(message.id, streamId);
+            }
+          }
+          try {
+            await this.writePrimingEvent(streamController, encoder, streamId, clientProtocolVersion);
+            for (const message of messages) {
+              let closeSSEStream;
+              let closeStandaloneSSEStream;
+              if ((0, types_js_1.isJSONRPCRequest)(message) && this._eventStore && clientProtocolVersion >= "2025-11-25") {
+                closeSSEStream = () => {
+                  this.closeSSEStream(message.id);
+                };
+                closeStandaloneSSEStream = () => {
+                  this.closeStandaloneSSEStream();
+                };
+              }
+              this.onmessage?.(message, { authInfo: options?.authInfo, requestInfo, closeSSEStream, closeStandaloneSSEStream });
+            }
+          } catch (error) {
+            this._streamMapping.get(streamId)?.cleanup();
+            this._resumableStreams.delete(streamId);
+            for (const message of messages) {
+              if ((0, types_js_1.isJSONRPCRequest)(message)) {
+                this._requestToStreamMapping.delete(message.id);
+              }
+            }
+            throw error;
+          }
+          if (this._streamMapping.get(streamId)?.controller === streamController) {
+            keepAliveTimer = this.startKeepAlive(streamController, encoder);
+          }
+          return new Response(readable, { status: 200, headers });
+        } catch (error) {
+          this.onerror?.(error);
+          return this.createJsonErrorResponse(400, -32700, "Parse error", { data: String(error) });
+        }
+      }
+      /**
+       * Handles DELETE requests to terminate sessions
+       */
+      async handleDeleteRequest(req) {
+        const sessionError = this.validateSession(req);
+        if (sessionError) {
+          return sessionError;
+        }
+        const protocolError = this.validateProtocolVersion(req);
+        if (protocolError) {
+          return protocolError;
+        }
+        try {
+          await Promise.resolve(this._onsessionclosed?.(this.sessionId));
+          return new Response(null, { status: 200 });
+        } finally {
+          await this.close();
+        }
+      }
+      /**
+       * Validates session ID for non-initialization requests.
+       * Returns Response error if invalid, undefined otherwise
+       */
+      validateSession(req) {
+        if (this.sessionIdGenerator === void 0) {
+          return void 0;
+        }
+        if (!this._initialized) {
+          this.onerror?.(new Error("Bad Request: Server not initialized"));
+          return this.createJsonErrorResponse(400, -32e3, "Bad Request: Server not initialized");
+        }
+        const sessionId = req.headers.get("mcp-session-id");
+        if (!sessionId) {
+          this.onerror?.(new Error("Bad Request: Mcp-Session-Id header is required"));
+          return this.createJsonErrorResponse(400, -32e3, "Bad Request: Mcp-Session-Id header is required");
+        }
+        if (sessionId !== this.sessionId) {
+          this.onerror?.(new Error("Session not found"));
+          return this.createJsonErrorResponse(404, -32001, "Session not found");
+        }
+        return void 0;
+      }
+      /**
+       * Validates the MCP-Protocol-Version header on incoming requests.
+       *
+       * For initialization: Version negotiation handles unknown versions gracefully
+       * (server responds with its supported version).
+       *
+       * For subsequent requests with MCP-Protocol-Version header:
+       * - Accept if in supported list
+       * - 400 if unsupported
+       *
+       * For HTTP requests without the MCP-Protocol-Version header:
+       * - Accept and default to the version negotiated at initialization
+       */
+      validateProtocolVersion(req) {
+        const protocolVersion = req.headers.get("mcp-protocol-version");
+        if (protocolVersion !== null && !types_js_1.SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
+          this.onerror?.(new Error(`Bad Request: Unsupported protocol version: ${protocolVersion} (supported versions: ${types_js_1.SUPPORTED_PROTOCOL_VERSIONS.join(", ")})`));
+          return this.createJsonErrorResponse(400, -32e3, `Bad Request: Unsupported protocol version: ${protocolVersion} (supported versions: ${types_js_1.SUPPORTED_PROTOCOL_VERSIONS.join(", ")})`);
+        }
+        return void 0;
+      }
+      async close() {
+        if (this._closed) {
+          return;
+        }
+        this._closed = true;
+        this._streamMapping.forEach(({ cleanup }) => {
+          cleanup();
+        });
+        this._streamMapping.clear();
+        this._requestResponseMap.clear();
+        this._resumableStreams.clear();
+        this.onclose?.();
+      }
+      /**
+       * Close an SSE stream for a specific request, triggering client reconnection.
+       * Use this to implement polling behavior during long-running operations -
+       * client will reconnect after the retry interval specified in the priming event.
+       */
+      closeSSEStream(requestId) {
+        const streamId = this._requestToStreamMapping.get(requestId);
+        if (!streamId)
+          return;
+        const stream = this._streamMapping.get(streamId);
+        if (stream) {
+          stream.cleanup();
+        }
+      }
+      /**
+       * Close the standalone GET SSE stream, triggering client reconnection.
+       * Use this to implement polling behavior for server-initiated notifications.
+       */
+      closeStandaloneSSEStream() {
+        const stream = this._streamMapping.get(this._standaloneSseStreamId);
+        if (stream) {
+          stream.cleanup();
+        }
+      }
+      async send(message, options) {
+        let requestId = options?.relatedRequestId;
+        if ((0, types_js_1.isJSONRPCResultResponse)(message) || (0, types_js_1.isJSONRPCErrorResponse)(message)) {
+          requestId = message.id;
+        }
+        if (requestId === void 0) {
+          if ((0, types_js_1.isJSONRPCResultResponse)(message) || (0, types_js_1.isJSONRPCErrorResponse)(message)) {
+            throw new Error("Cannot send a response on a standalone SSE stream unless resuming a previous client request");
+          }
+          let eventId;
+          if (this._eventStore) {
+            eventId = await this._eventStore.storeEvent(this._standaloneSseStreamId, message);
+          }
+          const standaloneSse = this._streamMapping.get(this._standaloneSseStreamId);
+          if (standaloneSse === void 0) {
+            return;
+          }
+          if (standaloneSse.controller && standaloneSse.encoder && (eventId === void 0 || !standaloneSse.replayedEventIds?.has(eventId))) {
+            this.writeSSEEvent(standaloneSse.controller, standaloneSse.encoder, message, eventId);
+          }
+          return;
+        }
+        const streamId = this._requestToStreamMapping.get(requestId);
+        if (!streamId) {
+          throw new Error(`No connection established for request ID: ${String(requestId)}`);
+        }
+        let stream = this._streamMapping.get(streamId);
+        if (!this._enableJsonResponse) {
+          let eventId;
+          if (this._eventStore) {
+            eventId = await this._eventStore.storeEvent(streamId, message);
+            stream = this._streamMapping.get(streamId);
+          }
+          if (stream?.controller && stream?.encoder && (eventId === void 0 || !stream.replayedEventIds?.has(eventId))) {
+            const written = this.writeSSEEvent(stream.controller, stream.encoder, message, eventId);
+            if (written && eventId !== void 0) {
+              this._resumableStreams.add(streamId);
+            }
+          }
+        }
+        if ((0, types_js_1.isJSONRPCResultResponse)(message) || (0, types_js_1.isJSONRPCErrorResponse)(message)) {
+          this._requestResponseMap.set(requestId, message);
+          const relatedIds = Array.from(this._requestToStreamMapping.entries()).filter(([_, sid]) => sid === streamId).map(([id]) => id);
+          const allResponsesReady = relatedIds.every((id) => this._requestResponseMap.has(id));
+          if (allResponsesReady) {
+            if (!stream) {
+              if (this._closed) {
+                for (const id of relatedIds) {
+                  this._requestResponseMap.delete(id);
+                  this._requestToStreamMapping.delete(id);
+                }
+                return;
+              }
+              if (!this._enableJsonResponse && this._eventStore && this._resumableStreams.has(streamId)) {
+                for (const id of relatedIds) {
+                  this._requestResponseMap.delete(id);
+                  this._requestToStreamMapping.delete(id);
+                }
+                this._resumableStreams.delete(streamId);
+                return;
+              }
+              for (const id of relatedIds) {
+                this._requestResponseMap.delete(id);
+                this._requestToStreamMapping.delete(id);
+              }
+              throw new Error(`No connection established for request ID: ${String(requestId)}`);
+            }
+            if (this._enableJsonResponse && stream.resolveJson) {
+              const headers = {
+                "Content-Type": "application/json"
+              };
+              if (this.sessionId !== void 0) {
+                headers["mcp-session-id"] = this.sessionId;
+              }
+              const responses = relatedIds.map((id) => this._requestResponseMap.get(id));
+              if (responses.length === 1) {
+                stream.resolveJson(new Response(JSON.stringify(responses[0]), { status: 200, headers }));
+              } else {
+                stream.resolveJson(new Response(JSON.stringify(responses), { status: 200, headers }));
+              }
+            } else {
+              stream.cleanup();
+            }
+            for (const id of relatedIds) {
+              this._requestResponseMap.delete(id);
+              this._requestToStreamMapping.delete(id);
+            }
+            this._resumableStreams.delete(streamId);
+          }
+        }
+      }
+    };
+    exports2.WebStandardStreamableHTTPServerTransport = WebStandardStreamableHTTPServerTransport;
+  }
+});
+
+// work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/streamableHttp.js
+var require_streamableHttp = __commonJS({
+  "work/build/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/streamableHttp.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.StreamableHTTPServerTransport = void 0;
+    var node_server_1 = require_dist2();
+    var webStandardStreamableHttp_js_1 = require_webStandardStreamableHttp();
+    var StreamableHTTPServerTransport = class {
+      constructor(options = {}) {
+        this._requestContext = /* @__PURE__ */ new WeakMap();
+        this._webStandardTransport = new webStandardStreamableHttp_js_1.WebStandardStreamableHTTPServerTransport(options);
+        this._requestListener = (0, node_server_1.getRequestListener)(async (webRequest) => {
+          const context = this._requestContext.get(webRequest);
+          return this._webStandardTransport.handleRequest(webRequest, {
+            authInfo: context?.authInfo,
+            parsedBody: context?.parsedBody
+          });
+        }, { overrideGlobalObjects: false });
+      }
+      /**
+       * Gets the session ID for this transport instance.
+       */
+      get sessionId() {
+        return this._webStandardTransport.sessionId;
+      }
+      /**
+       * Sets callback for when the transport is closed.
+       */
+      set onclose(handler) {
+        this._webStandardTransport.onclose = handler;
+      }
+      get onclose() {
+        return this._webStandardTransport.onclose;
+      }
+      /**
+       * Sets callback for transport errors.
+       */
+      set onerror(handler) {
+        this._webStandardTransport.onerror = handler;
+      }
+      get onerror() {
+        return this._webStandardTransport.onerror;
+      }
+      /**
+       * Sets callback for incoming messages.
+       */
+      set onmessage(handler) {
+        this._webStandardTransport.onmessage = handler;
+      }
+      get onmessage() {
+        return this._webStandardTransport.onmessage;
+      }
+      /**
+       * Starts the transport. This is required by the Transport interface but is a no-op
+       * for the Streamable HTTP transport as connections are managed per-request.
+       */
+      async start() {
+        return this._webStandardTransport.start();
+      }
+      /**
+       * Closes the transport and all active connections.
+       */
+      async close() {
+        return this._webStandardTransport.close();
+      }
+      /**
+       * Sends a JSON-RPC message through the transport.
+       */
+      async send(message, options) {
+        return this._webStandardTransport.send(message, options);
+      }
+      /**
+       * Handles an incoming HTTP request, whether GET or POST.
+       *
+       * This method converts Node.js HTTP objects to Web Standard Request/Response
+       * and delegates to the underlying WebStandardStreamableHTTPServerTransport.
+       *
+       * @param req - Node.js IncomingMessage, optionally with auth property from middleware
+       * @param res - Node.js ServerResponse
+       * @param parsedBody - Optional pre-parsed body from body-parser middleware
+       */
+      async handleRequest(req, res, parsedBody) {
+        const authInfo = req.auth;
+        const handler = (0, node_server_1.getRequestListener)(async (webRequest) => {
+          return this._webStandardTransport.handleRequest(webRequest, {
+            authInfo,
+            parsedBody
+          });
+        }, { overrideGlobalObjects: false });
+        await handler(req, res);
+      }
+      /**
+       * Close an SSE stream for a specific request, triggering client reconnection.
+       * Use this to implement polling behavior during long-running operations -
+       * client will reconnect after the retry interval specified in the priming event.
+       */
+      closeSSEStream(requestId) {
+        this._webStandardTransport.closeSSEStream(requestId);
+      }
+      /**
+       * Close the standalone GET SSE stream, triggering client reconnection.
+       * Use this to implement polling behavior for server-initiated notifications.
+       */
+      closeStandaloneSSEStream() {
+        this._webStandardTransport.closeStandaloneSSEStream();
+      }
+    };
+    exports2.StreamableHTTPServerTransport = StreamableHTTPServerTransport;
+  }
+});
+
+// outputs/LibreOffice-MCP/src/http.cjs
+var require_http = __commonJS({
+  "outputs/LibreOffice-MCP/src/http.cjs"(exports2, module2) {
+    var { createServer } = require("node:http");
+    var { createHash, timingSafeEqual } = require("node:crypto");
+    var { StreamableHTTPServerTransport } = require_streamableHttp();
+    var maxBodyBytes = 8 * 1024 * 1024;
+    var digest = (text2) => createHash("sha256").update(text2).digest();
+    function reply(response, status, message) {
+      response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+      response.end(JSON.stringify({ error: message }));
+    }
+    async function readJson(request, response) {
+      const parts = [];
+      let bytes = 0;
+      for await (const part of request.iterator({ destroyOnReturn: false })) {
+        bytes += part.length;
+        if (bytes > maxBodyBytes) {
+          response.setHeader("Connection", "close");
+          reply(response, 413, "Permintaan melebihi 8 MiB.");
+          return;
+        }
+        parts.push(part);
+      }
+      try {
+        const value = JSON.parse(Buffer.concat(parts).toString("utf8"));
+        if (value && typeof value === "object") return value;
+      } catch {
+      }
+      reply(response, 400, "Isi permintaan harus berupa objek atau array JSON.");
+    }
+    function startHttp2(createMcp2) {
+      const rawPort = process.env.LO_MCP_HTTP_PORT || "8765";
+      if (!/^\d{1,5}$/.test(rawPort) || Number(rawPort) > 65535) {
+        throw new Error("LO_MCP_HTTP_PORT harus berupa nomor port dari 0 sampai 65535.");
+      }
+      const token = process.env.LO_MCP_HTTP_TOKEN;
+      if (!token || !/^[A-Za-z0-9._~+/-]{32,256}$/.test(token)) {
+        throw new Error("Atur LO_MCP_HTTP_TOKEN ke token acak 32\u2013256 karakter. Lihat docs/KLIEN.md.");
+      }
+      const expected = digest("Bearer " + token);
+      const http = createServer(async (request, response) => {
+        try {
+          const port = http.address().port;
+          const hosts = ["127.0.0.1:" + port, "localhost:" + port];
+          const origin = request.headers.origin;
+          if (!hosts.includes(request.headers.host) || origin !== void 0 && !hosts.some((h) => origin === "http://" + h)) {
+            reply(response, 403, "Host atau Origin tidak diizinkan.");
+            return;
+          }
+          if (request.url !== "/mcp") {
+            reply(response, 404, "Endpoint MCP tersedia di /mcp.");
+            return;
+          }
+          if (!timingSafeEqual(digest(request.headers.authorization || ""), expected)) {
+            response.setHeader("WWW-Authenticate", 'Bearer realm="LibreOffice MCP"');
+            reply(response, 401, "Token akses MCP diperlukan.");
+            return;
+          }
+          let body;
+          if (request.method === "POST") {
+            const type = (request.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+            if (type !== "application/json") {
+              reply(response, 415, "Gunakan Content-Type application/json.");
+              return;
+            }
+            if (Number(request.headers["content-length"]) > maxBodyBytes) {
+              response.setHeader("Connection", "close");
+              reply(response, 413, "Permintaan melebihi 8 MiB.");
+              return;
+            }
+            body = await readJson(request, response);
+            if (body === void 0 || response.destroyed) return;
+          }
+          const mcp = createMcp2();
+          const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: void 0, enableJsonResponse: true });
+          response.once("close", () => {
+            mcp.close().catch(() => {
+            });
+          });
+          await mcp.connect(transport);
+          await transport.handleRequest(request, response, body);
+        } catch (error) {
+          if (!response.headersSent && !response.destroyed) reply(response, 500, "Permintaan MCP gagal diproses.");
+          else if (!response.writableEnded) response.destroy();
+          console.error(error.message);
+        }
+      });
+      http.on("error", (error) => {
+        console.error(error.message);
+        process.exitCode = 1;
+      });
+      http.listen(Number(rawPort), "127.0.0.1", () => {
+        console.error("LibreOffice MCP: http://127.0.0.1:" + http.address().port + "/mcp");
+      });
+      return http;
+    }
+    module2.exports = { startHttp: startHttp2 };
+  }
+});
+
 // outputs/LibreOffice-MCP/src/package.json
 var require_package = __commonJS({
   "outputs/LibreOffice-MCP/src/package.json"(exports2, module2) {
     module2.exports = {
       name: "libreoffice-mcp",
-      version: "1.0.0",
+      version: "1.1.0",
       private: true,
       dependencies: {
         "@modelcontextprotocol/sdk": "1.32.2",
@@ -43712,11 +46326,17 @@ var { createRunner } = require_office_runtime();
 var { McpServer } = require_mcp();
 var { StdioServerTransport } = require_stdio2();
 var { z } = require_v4();
+var { startHttp } = require_http();
 var { version } = require_package();
-var server = new McpServer({ name: "libreoffice-local", version });
 var { runOffice, shutdown } = createRunner(path.join(__dirname, "office.py"));
+var tools = [];
+function createMcp() {
+  const server = new McpServer({ name: "libreoffice-local", version });
+  for (const [name, config, handler] of tools) server.registerTool(name, config, handler);
+  return server;
+}
 function tool(name, description, schema) {
-  server.registerTool(
+  tools.push([
     name,
     {
       description,
@@ -43731,7 +46351,7 @@ function tool(name, description, schema) {
         return { isError: true, content: [{ type: "text", text: error.message }] };
       }
     }
-  );
+  ]);
 }
 var filename = z.string().min(1).max(180);
 var source = filename.describe("Nama file di folder dokumen MCP.");
@@ -43843,14 +46463,40 @@ tool("base_append", "Tambahkan baris ke tabel Firebird tertanam dan simpan ODB b
   rows: z.array(z.array(dbValue).min(1).max(40)).min(1).max(200)
 });
 require_extra_tools()({ tool, z, source, output, sheet, start, page });
-process.stdin.on("end", shutdown);
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.once(signal, () => {
-    shutdown();
-    process.stdin.destroy();
-  });
+function launch() {
+  const args = process.argv.slice(2);
+  if (args.length === 1 && args[0] === "--http") {
+    const server = startHttp(createMcp);
+    for (const signal of ["SIGINT", "SIGTERM"]) {
+      process.once(signal, () => {
+        server.close();
+        server.closeAllConnections();
+        shutdown();
+      });
+    }
+  } else if (!args.length || args.length === 1 && args[0] === "--stdio") {
+    process.stdin.on("end", shutdown);
+    for (const signal of ["SIGINT", "SIGTERM"]) {
+      process.once(signal, () => {
+        shutdown();
+        process.stdin.destroy();
+      });
+    }
+    return createMcp().connect(new StdioServerTransport());
+  } else {
+    throw new Error("Gunakan: node server.cjs [--stdio|--http]");
+  }
 }
-server.connect(new StdioServerTransport()).catch((error) => {
+Promise.resolve().then(launch).catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
 });
+/*! Bundled license information:
+
+content-type/index.js:
+  (*!
+   * content-type
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+*/

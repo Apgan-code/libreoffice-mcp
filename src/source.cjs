@@ -3,13 +3,20 @@ const { createRunner } = require("./office-runtime.cjs");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = require("zod/v4");
+const { startHttp } = require("./http.cjs");
 
 const { version } = require("./package.json");
-const server = new McpServer({ name: "libreoffice-local", version });
 const { runOffice, shutdown } = createRunner(path.join(__dirname, "office.py"));
+const tools = [];
+
+function createMcp() {
+  const server = new McpServer({ name: "libreoffice-local", version });
+  for (const [name, config, handler] of tools) server.registerTool(name, config, handler);
+  return server;
+}
 
 function tool(name, description, schema) {
-  server.registerTool(name, { description, inputSchema: schema,
+  tools.push([name, { description, inputSchema: schema,
     annotations: { readOnlyHint: !("output" in schema), destructiveHint: false, openWorldHint: false } },
     async (args, extra) => {
       try {
@@ -18,7 +25,7 @@ function tool(name, description, schema) {
       } catch (error) {
         return { isError: true, content: [{ type: "text", text: error.message }] };
       }
-    });
+    }]);
 }
 
 const filename = z.string().min(1).max(180);
@@ -99,8 +106,22 @@ tool("base_append", "Tambahkan baris ke tabel Firebird tertanam dan simpan ODB b
 
 require("./extra-tools.cjs")({ tool, z, source, output, sheet, start, page });
 
-process.stdin.on("end", shutdown);
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.once(signal, () => { shutdown(); process.stdin.destroy(); });
+function launch() {
+  const args = process.argv.slice(2);
+  if (args.length === 1 && args[0] === "--http") {
+    const server = startHttp(createMcp);
+    for (const signal of ["SIGINT", "SIGTERM"]) {
+      process.once(signal, () => { server.close(); server.closeAllConnections(); shutdown(); });
+    }
+  } else if (!args.length || (args.length === 1 && args[0] === "--stdio")) {
+    process.stdin.on("end", shutdown);
+    for (const signal of ["SIGINT", "SIGTERM"]) {
+      process.once(signal, () => { shutdown(); process.stdin.destroy(); });
+    }
+    return createMcp().connect(new StdioServerTransport());
+  } else {
+    throw new Error("Gunakan: node server.cjs [--stdio|--http]");
+  }
 }
-server.connect(new StdioServerTransport()).catch(error => { console.error(error.message); process.exitCode = 1; });
+
+Promise.resolve().then(launch).catch(error => { console.error(error.message); process.exitCode = 1; });

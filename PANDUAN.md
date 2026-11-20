@@ -1,19 +1,16 @@
-# MCP LibreOffice v1.0.0 untuk Windows dan Linux
+# MCP LibreOffice v1.1.0 untuk Windows dan Linux
 
 Gunakan Writer, Calc, Impress, Draw, Math, dan Base lewat chat. Server bekerja secara lokal. Kamu bisa membuat laporan bertabel, menyusun grafik dari spreadsheet, menyunting slide, atau mengekspor halaman tertentu ke PDF.
 
-[Daftar 40 alat dan contoh pemakaian](docs/ALAT.md) · [Hasil pengujian](docs/PENGUJIAN.md)
+[Konfigurasi aplikasi MCP](docs/KLIEN.md) · [Daftar 40 alat dan contoh pemakaian](docs/ALAT.md) · [Hasil pengujian](docs/PENGUJIAN.md)
 
 ## Mulai di Windows
 
-Jika server `libreoffice` sudah terdaftar dan folder ini tetap di lokasi semula, buka chat Codex baru. Untuk pemasangan baru, ekstrak seluruh paket ke lokasi tetap. Gunakan Node.js 20 atau lebih baru dan LibreOffice untuk Windows dengan Python bawaan. Buka PowerShell di folder paket lalu jalankan:
+Ekstrak paket ke lokasi tetap. Gunakan Node.js 20 atau lebih baru dan LibreOffice untuk Windows dengan Python bawaan. Buka PowerShell di folder paket lalu jalankan:
 
 ```powershell
 node .\uji.cjs --cepat
-.\pasang-codex.ps1
 ```
-
-Jika PowerShell membatasi skrip, daftarkan server langsung dengan `codex mcp add libreoffice -- (Get-Command node.exe).Source (Resolve-Path .\server.cjs).Path`.
 
 ## Mulai di Linux
 
@@ -24,15 +21,18 @@ sudo apt update
 sudo apt install libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw libreoffice-math libreoffice-base libreoffice-sdbc-firebird python3-uno
 ```
 
-Ekstrak ZIP ke folder yang bisa ditulis oleh akunmu. Dari dalam folder yang berisi `server.cjs`, periksa versi Node, jalankan uji cepat, lalu daftarkan server dengan Codex CLI:
+Ekstrak ZIP ke folder yang bisa ditulis oleh akunmu. Dari dalam folder yang berisi `server.cjs`, periksa versi Node dan jalankan uji cepat:
 
 ```sh
 node --version
 node ./uji.cjs --cepat
-sh ./pasang-codex.sh
 ```
 
-Uji cepat membuat dan membuka kembali satu ODT di folder sementara. Setelah muncul **Uji cepat lulus** dan server terdaftar, buka chat Codex baru lalu ketik **“Gunakan LibreOffice. Jalankan office_status dan beri tahu saya lokasi folder dokumen.”** Jalankan skrip pemasangan sebagai pengguna yang menjalankan Codex.
+Uji cepat membuat dan membuka kembali satu ODT di folder sementara. Setelah muncul **Uji cepat lulus**, ikuti [langkah untuk klien yang kamu pakai](docs/KLIEN.md). Untuk uji pertama di aplikasi, minta **“Gunakan LibreOffice. Jalankan office_status dan beri tahu saya lokasi folder dokumen.”**
+
+## Codex (opsional)
+
+Jalankan `pasang-codex.ps1` di PowerShell atau `sh ./pasang-codex.sh` di Linux. Jika server sudah terdaftar dan folder tetap di lokasi semula, buka chat baru. Jika PowerShell membatasi skrip, gunakan `codex mcp add libreoffice -- (Get-Command node.exe).Source (Resolve-Path .\server.cjs).Path`.
 
 ## Pekerjaan pertama
 
@@ -42,9 +42,9 @@ Letakkan sumber di folder `dokumen` di samping server. Coba permintaan berikut d
 
 Setiap operasi edit memakai nama file hasil baru. Untuk mencoba dokumen sendiri, panggil `office_files` agar AI melihat file yang tersedia. Server mengakses nama file langsung di folder dokumen dan menerima sumber sampai 64 MiB.
 
-## Lokasi khusus dan aplikasi selain Codex
+## Lokasi folder dan runtime khusus
 
-Untuk klien MCP lain, pilih **stdio**. Isi perintah dengan lokasi absolut program Node dan isi daftar argumen dengan satu entri, yaitu lokasi absolut `server.cjs`. Seluruh SDK MCP sudah disertakan. Contoh konfigurasi untuk klien yang memakai `mcpServers`:
+Seluruh SDK MCP sudah disertakan. Contoh konfigurasi folder khusus untuk klien yang memakai `mcpServers`:
 
 ```json
 {

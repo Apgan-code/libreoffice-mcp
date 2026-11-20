@@ -1,27 +1,30 @@
-# Pengujian MCP LibreOffice v1.0.0
+# Pengujian MCP LibreOffice v1.1.0
 
 Pengujian integrasi menjalankan server melalui MCP yang sebenarnya. Klien meminta katalog alat, memanggil tiap alat, kemudian membuka kembali dokumen untuk memeriksa hasilnya. Dokumen contoh dibuat dalam folder sementara.
 
 ## Hasil
 
-| Sistem uji | Runtime | Hasil |
+| Sistem uji | Runtime | Uji lengkap |
 | --- | --- | --- |
-| Windows x64 | Node.js 20.18.0, LibreOffice 26.8.3.1 | 58 skenario, 40 alat berhasil dipanggil |
-| Debian GNU/Linux 13 (trixie) x64 | Node.js 20.19.2, Python 3.13.5, LibreOffice 25.2.3.2 | 58 skenario, 40 alat berhasil dipanggil |
+| Windows x64 | Node.js 20.18.0, LibreOffice 26.8.3.1 | stdio, 58 skenario, 40 alat |
+| Debian GNU/Linux 13 (trixie) x64 | Node.js 20.19.2, Python 3.13.5, LibreOffice 25.2.3.2 | Streamable HTTP, 58 skenario, 40 alat |
 
-Di kedua sistem, pemeriksaan tambahan memastikan PDF pilihan halaman hanya memuat isi slide kedua. Di Debian, skrip pendaftaran juga lulus pemeriksaan argumen dan perilaku saat dijalankan ulang dengan simulasi Codex CLI.
+Uji cepat juga menjalankan Streamable HTTP di Windows dan stdio di Debian. Di Windows, klien SDK MCP resmi berhasil tersambung ke kedua transport, melihat 40 alat, dan memanggil `office_status`. Format konfigurasi divalidasi berdasarkan struktur masing-masing klien. Pengujian dijalankan di tingkat protokol dan generator.
 
 ## Cara mengulang pengujian
 
 ```sh
 node uji.cjs
+node uji.cjs --http
+node tests/config.cjs
 ```
 
-Gunakan `node uji.cjs --cepat` untuk memeriksa koneksi LibreOffice dan pembuatan satu ODT. Jika memakai Docker di Linux, jalankan perintah berikut dari folder paket:
+Tambahkan `--cepat` pada uji stdio atau HTTP untuk memeriksa koneksi dan pembuatan satu ODT. Uji HTTP membuat token dan port sementara, serta memeriksa penolakan token yang salah, Host atau Origin asing, dan isi permintaan yang tidak valid. Jika memakai Docker di Linux, jalankan perintah berikut dari folder paket:
 
 ```sh
 docker build -f tests/Dockerfile.linux -t libreoffice-mcp-qa .
 docker run --rm libreoffice-mcp-qa
+docker run --rm libreoffice-mcp-qa node uji.cjs --http
 ```
 
 ## Cakupan

@@ -1,8 +1,9 @@
-# LibreOffice MCP v1.0.0
+# LibreOffice MCP v1.1.0
 
-Server MCP lokal untuk Writer, Calc, Impress, Draw, Math, dan Base di Windows dan Linux. Paket mencakup 40 alat untuk membuat, membaca, mengedit, dan mengonversi dokumen.
+Server MCP untuk Writer, Calc, Impress, Draw, Math, dan Base di Windows dan Linux. Paket mencakup 40 alat untuk membuat, membaca, mengedit, dan mengonversi dokumen melalui stdio atau Streamable HTTP.
 
 - [Pemasangan Windows dan Linux](PANDUAN.md)
+- [Konfigurasi Claude, VS Code, Cursor, Gemini CLI, OpenCode, Codex, dan ChatGPT](docs/KLIEN.md)
 - [Daftar alat dan contoh](docs/ALAT.md)
 - [Cara mengulang pengujian](docs/PENGUJIAN.md)
 
