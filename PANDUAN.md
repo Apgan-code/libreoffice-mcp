@@ -1,4 +1,4 @@
-# MCP LibreOffice v1.1.1 untuk Windows dan Linux
+# MCP LibreOffice v1.0 untuk Windows dan Linux
 
 Gunakan Writer, Calc, Impress, Draw, Math, dan Base lewat chat. Server bekerja secara lokal. Kamu bisa membuat laporan bertabel, menyusun grafik dari spreadsheet, menyunting slide, atau mengekspor halaman tertentu ke PDF.
 

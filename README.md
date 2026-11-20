@@ -1,4 +1,4 @@
-# LibreOffice MCP v1.1.1
+# LibreOffice MCP v1.0
 
 Server MCP untuk Writer, Calc, Impress, Draw, Math, dan Base di Windows dan Linux. Paket mencakup 40 alat untuk membuat, membaca, mengedit, dan mengonversi dokumen melalui stdio atau Streamable HTTP.
 

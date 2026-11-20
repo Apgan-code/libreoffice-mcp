@@ -46226,7 +46226,7 @@ var require_package = __commonJS({
   "outputs/LibreOffice-MCP/src/package.json"(exports2, module2) {
     module2.exports = {
       name: "libreoffice-mcp",
-      version: "1.1.1",
+      version: "1.0.0",
       private: true,
       dependencies: {
         "@modelcontextprotocol/sdk": "1.32.2",
