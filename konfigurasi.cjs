@@ -1,8 +1,8 @@
 // Cetak konfigurasi siap disalin. File pengaturan aplikasi tetap dikelola pengguna.
 const path = require("node:path");
 
-const clients = ["vscode", "cursor", "gemini", "opencode", "claude-desktop", "claude-code", "generic"];
-const urlClients = ["vscode", "cursor", "gemini", "opencode", "generic"];
+const remoteFields = { vscode: "url", cursor: "url", gemini: "httpUrl", antigravity: "serverUrl", opencode: "url", generic: "url" };
+const clients = [...Object.keys(remoteFields), "claude-desktop", "claude-code"];
 const [client, mode = "stdio", endpoint = "http://127.0.0.1:8765/mcp", ...extra] = process.argv.slice(2);
 const usage = "node konfigurasi.cjs <" + clients.join("|") + "> [stdio|http] [URL]";
 if (!client || client === "--help") {
@@ -10,7 +10,7 @@ if (!client || client === "--help") {
   process.exit(0);
 }
 if (!clients.includes(client) || !["stdio", "http"].includes(mode) || extra.length ||
-    (mode === "stdio" && process.argv.length > 4) || (mode === "http" && !urlClients.includes(client))) {
+    (mode === "stdio" && process.argv.length > 4) || (mode === "http" && !Object.hasOwn(remoteFields, client))) {
   console.error(usage);
   process.exit(1);
 }
@@ -40,7 +40,7 @@ if (mode === "stdio") {
       headers: { Authorization: "Bearer {env:LO_MCP_HTTP_TOKEN}" } } } } };
   } else {
     const headers = { Authorization: client === "cursor" ? "Bearer ${env:LO_MCP_HTTP_TOKEN}" : authorization };
-    config = { mcpServers: { [name]: { [client === "gemini" ? "httpUrl" : "url"]: endpoint, headers } } };
+    config = { mcpServers: { [name]: { [remoteFields[client]]: endpoint, headers } } };
   }
 }
 console.log(JSON.stringify(config, null, 2));

@@ -1,4 +1,6 @@
-# Pengujian MCP LibreOffice v1.1.0
+# Pengujian MCP LibreOffice
+
+Versi 1.1.1 menambahkan generator untuk konfigurasi Antigravity dengan `command` dan `args` (stdio) atau `serverUrl` (Streamable HTTP). Bentuk konfigurasi tersebut diuji dengan `node tests/config.cjs`. Implementasi kedua transport tetap sama seperti v1.1.0.
 
 Pengujian integrasi menjalankan server melalui MCP yang sebenarnya. Klien meminta katalog alat, memanggil tiap alat, kemudian membuka kembali dokumen untuk memeriksa hasilnya. Dokumen contoh dibuat dalam folder sementara.
 

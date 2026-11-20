@@ -21,7 +21,8 @@ function getEntry(name, value) {
   return value.mcpServers.libreoffice;
 }
 
-const httpClients = ["vscode", "cursor", "gemini", "opencode", "generic"];
+const httpClients = ["vscode", "cursor", "gemini", "antigravity", "opencode", "generic"];
+const specialUrlFields = { gemini: "httpUrl", antigravity: "serverUrl" };
 for (const name of [...httpClients, "claude-desktop", "claude-code"]) {
   const local = getEntry(name, generate(name));
   assert.deepEqual(name === "opencode" ? local.command : [local.command, ...local.args],
@@ -30,11 +31,13 @@ for (const name of [...httpClients, "claude-desktop", "claude-code"]) {
 for (const name of httpClients) {
   const url = "http://127.0.0.1:9887/mcp";
   const remote = getEntry(name, generate(name, "http", url));
-  assert.equal(name === "gemini" ? remote.httpUrl : remote.url, url, name);
+  const field = specialUrlFields[name] || "url";
+  assert.equal(remote[field], url, name);
+  assert.equal(["url", "httpUrl", "serverUrl"].filter(key => key in remote).length, 1, name);
   assert.match(remote.headers.Authorization, /^Bearer /);
 }
 const rejection = spawnSync(process.execPath, [generator, "generic", "http", "https://user@example.invalid/mcp"],
   { encoding: "utf8" });
 assert.equal(rejection.status, 1);
 assert.equal(rejection.stdout, "");
-console.log("Tujuh format stdio dan lima format konfigurasi HTTP lulus.");
+console.log("Delapan konfigurasi stdio dan enam konfigurasi HTTP lulus.");

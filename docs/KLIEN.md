@@ -17,6 +17,7 @@ Salin hasilnya ke pengaturan aplikasi. Jika sudah ada server lain, tambahkan ent
 | VS Code / GitHub Copilot | `vscode` | Buka **MCP: Open User Configuration** atau gunakan `.vscode/mcp.json` di proyek. Gabungkan entri di `servers`. [Dokumentasi VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration) |
 | Cursor | `cursor` | `~/.cursor/mcp.json` atau `.cursor/mcp.json` di proyek. [Dokumentasi Cursor](https://prod.cursor.com/docs/mcp) |
 | Gemini CLI | `gemini` | `~/.gemini/settings.json` atau `.gemini/settings.json` di proyek. Jalankan `/mcp` untuk memeriksa server. [Dokumentasi Gemini CLI](https://geminicli.com/docs/tools/mcp-server/) |
+| Google Antigravity App, IDE, dan CLI | `antigravity` | `~/.gemini/config/mcp_config.json` atau `.agents/mcp_config.json` di proyek. Di IDE, buka **MCP Servers → Manage MCP Servers → View raw config**. [Dokumentasi Google Antigravity](https://antigravity.google/docs/mcp) |
 | OpenCode | `opencode` | `opencode.json` atau `opencode.jsonc` di proyek. Gabungkan di `mcp.servers`. [Dokumentasi OpenCode](https://opencode.ai/docs/mcp-servers/) |
 | Claude Desktop | `claude-desktop` | Tambahkan di `claude_desktop_config.json` di Windows, biasanya di folder `%APPDATA%\Claude`. Tutup dan buka aplikasi setelah menyimpan. [Panduan Claude Desktop](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) |
 | Claude Code | `claude-code` | Gunakan `.mcp.json` di proyek atau daftarkan langsung dengan `claude mcp add --transport stdio libreoffice -- node /lokasi/server.cjs`. [Dokumentasi Claude Code](https://code.claude.com/docs/en/mcp) |
@@ -24,6 +25,13 @@ Salin hasilnya ke pengaturan aplikasi. Jika sudah ada server lain, tambahkan ent
 | Klien lainnya | `generic` | Gunakan hasil JSON jika klien memakai `mcpServers`. Jika tersedia formulir, masukkan lokasi absolut Node.js di **Command** dan lokasi `server.cjs` di **Arguments**. |
 
 Untuk mencoba koneksi, minta klien menjalankan `office_status` dan membaca lokasi folder dokumen.
+
+Jika menggunakan Antigravity CLI, kamu juga bisa mendaftarkan stdio tanpa mengedit JSON. Jalankan dari folder paket di PowerShell:
+
+```powershell
+agy mcp add libreoffice (Get-Command node.exe).Source (Resolve-Path .\server.cjs).Path
+agy mcp list
+```
 
 ## Streamable HTTP di komputer yang sama
 
@@ -49,10 +57,11 @@ Biarkan proses berjalan. Di klien pilih **Streamable HTTP**, masukkan `http://12
 node konfigurasi.cjs vscode http
 node konfigurasi.cjs cursor http
 node konfigurasi.cjs gemini http
+node konfigurasi.cjs antigravity http
 node konfigurasi.cjs opencode http
 ```
 
-VS Code akan meminta token. Cursor dan OpenCode mengambilnya dari lingkungan proses aplikasi. Untuk Gemini CLI atau format generik, ganti `GANTI_DENGAN_TOKEN_LOKAL` di konfigurasi lokal. Argumen URL opsional setelah `http` mengubah alamat pada konfigurasi yang dicetak. Mode ini memakai token Bearer dan port loopback IPv4.
+VS Code akan meminta token. Cursor dan OpenCode mengambilnya dari lingkungan proses aplikasi. Untuk Gemini CLI, Antigravity, atau format generik, ganti `GANTI_DENGAN_TOKEN_LOKAL` di konfigurasi lokal. Argumen URL opsional setelah `http` mengubah alamat pada konfigurasi yang dicetak. Mode ini memakai token Bearer dan port loopback IPv4.
 
 ## ChatGPT web dan klien yang berjalan di cloud
 
