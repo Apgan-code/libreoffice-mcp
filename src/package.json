@@ -1,0 +1,10 @@
+{
+  "name": "libreoffice-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "esbuild-wasm": "0.27.7",
+    "zod": "4.6.7"
+  }
+}

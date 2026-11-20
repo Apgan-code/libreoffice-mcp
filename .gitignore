@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+node_modules/
+.lo-mcp-*/
+dokumen/*
+!dokumen/.gitkeep
+.env
+.env.*
+*.log
